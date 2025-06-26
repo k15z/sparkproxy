@@ -1,0 +1,43 @@
+# sparkproxy
+
+This service provides an OpenAPI-compatible API for interacting with Spark. It supports multiple 
+wallets and multiple assets, with the goal of exposing all the functionality of the Javascript 
+Spark SDK over a REST API so you can use Spark without JS.
+
+In addition, this also provides a lightweight invoicing layer which helps you manage the payment
+lifecycle, from issuing multi-asset invoices to receiving updates via webhooks, to help you build
+merchant-type application such as [Inference Grid](https://inferencegrid.ai/).
+
+> 🚨 **WARNING:** The public endpoint at https://sparkproxy.kevz.dev is meant for testing. For actual 
+> applications, you should run your own instance. 🚨
+
+Built with Hono and Drizzle ORM.
+
+## Development
+
+Generate a private key and add it to your `.env` file:
+
+```sh
+openssl genrsa -out rsa_private.key 2048
+base64 -i rsa_private.key
+```
+
+To install dependencies:
+
+```sh
+bun install
+```
+
+To set up the database:
+
+```sh
+bun run drizzle-kit push
+```
+
+To run:
+
+```sh
+bun run dev
+```
+
+open http://localhost:3000 and check out the docs at http://localhost:3000/docs
