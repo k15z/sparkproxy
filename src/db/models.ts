@@ -18,6 +18,7 @@ export const invoicesTable = sqliteTable("invoices_table", {
   webhook_url: text().notNull(),
   sweep_address: text().notNull(),
   spark_address: text().notNull(),
+  sending_address: text(),
   lightning_invoice: text().notNull(),
   paid: int({
     mode: 'boolean',

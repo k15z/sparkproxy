@@ -4,6 +4,7 @@ import { createRoute } from '@hono/zod-openapi'
 
 export const WalletInfoSchema = z.object({
     mnemonic: z.string(),
+    address: z.string(),
 })
 
 export const initializeRoute = createRoute({

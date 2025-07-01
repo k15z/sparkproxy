@@ -29,4 +29,7 @@ app.get("/.well-known/webhook-public-key.pem", (c) => {
 
 app.get("/*", serveStatic({ root: './public' }))
 
-export default app
+export default {
+  fetch: app.fetch,
+  idleTimeout: 60,
+};

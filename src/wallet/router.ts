@@ -7,13 +7,16 @@ export const app = new OpenAPIHono()
 
 app.openapi(initializeRoute, async (c) => {
     const { 'spark-network': network } = c.req.valid('header')
-    const { mnemonic: walletMnemonic } = await SparkWallet.initialize({
+    const { mnemonic: walletMnemonic, wallet } = await SparkWallet.initialize({
         options: {
             network: network,
         },
     })
+    const address = await wallet.getSparkAddress();
+    await wallet.cleanupConnections();
     return c.json({
         mnemonic: walletMnemonic!,
+        address: address,
     }, 200)
 })
 

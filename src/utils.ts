@@ -33,7 +33,7 @@ export async function loadWallet({
             setTimeout(() => {
                 console.warn('Timeout reached, resolving');
                 resolve(true);
-            }, 5000);
+            }, 10000);
         })
     }
     return wallet;

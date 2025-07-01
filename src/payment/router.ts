@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as crypto from 'crypto';
 import { Network, SparkWallet } from '@buildonspark/spark-sdk'
+import { encodeSparkAddress } from '@buildonspark/spark-sdk/address';
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { drizzle } from 'drizzle-orm/libsql';
 import { eq, and, gt } from 'drizzle-orm';
@@ -53,16 +54,39 @@ async function isOfferMet(wallet: SparkWallet, offers: z.infer<typeof OfferSchem
     for (const offer of offers) {
         if (offer.asset === "BITCOIN") {
             if (balance.balance >= offer.amount) {
-                return true
+                const result = await wallet.getTransfers(10, 0);
+                if (result.transfers.length > 0) {
+                    for (const transfer of result.transfers) {
+                        if (transfer.transferDirection === 'INCOMING') {
+                            return {
+                                paid: true,
+                                sending_address: encodeSparkAddress({
+                                    identityPublicKey: transfer.senderIdentityPublicKey,
+                                    network: 'MAINNET',
+                                }),
+                            }
+                        }
+                    }
+                }
+                return {
+                    paid: true,
+                    sending_address: null,
+                }
             }
         } else if (offer.asset === "TOKEN") {
             const tokenBalance = balance.tokenBalances.get(offer.token_pubkey)
             if (tokenBalance && tokenBalance.balance >= offer.amount) {
-                return true
+                return {
+                    paid: true,
+                    sending_address: null,
+                }
             }
         }
     }
-    return false
+    return {
+        paid: false,
+        sending_address: null,
+    }
 }
 
 async function sendWebhook(webhookURL: string, payload: string) {
@@ -99,8 +123,9 @@ const scanInvoices = async () => {
 
         // If there are transactions, we'll check if the offer condition have been met.
         const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network })
-        if (await isOfferMet(wallet, JSON.parse(invoice.offers_json))) {
-            await db.update(invoicesTable).set({ paid: true }).where(eq(invoicesTable.id, invoice.id))
+        const offerStatus = await isOfferMet(wallet, JSON.parse(invoice.offers_json))
+        if (offerStatus.paid) {
+            await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
             await transferAll(wallet, invoice.sweep_address)
             if (invoice.webhook_url) {
                 await sendWebhook(invoice.webhook_url, JSON.stringify({
@@ -169,5 +194,6 @@ app.openapi(checkInvoiceRoute, async (c) => {
     return c.json({
         invoice_id: result.id,
         paid: result.paid,
+        sending_address: result.sending_address,
     }, 200)
 })
