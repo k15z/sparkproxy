@@ -5,7 +5,7 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@buildonspark/spark-sdk": "^0.1.41",
+    "@buildonspark/spark-sdk": "^0.1.43",
     "@hono/node-server": "^1.14.4",
     "@hono/swagger-ui": "^0.5.2",
     "@hono/zod-openapi": "^0.19.8",
