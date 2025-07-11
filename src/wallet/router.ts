@@ -25,7 +25,6 @@ app.openapi(balanceRoute, async (c) => {
     const wallet = await loadWallet({ mnemonic, network })
     try {
         const { balance, tokenBalances } = await wallet.getBalance()
-        await wallet.cleanupConnections();
         return c.json(
             {
                 address: await wallet.getSparkAddress(),
@@ -52,6 +51,8 @@ app.openapi(balanceRoute, async (c) => {
         return c.json({
             error: unknownErrorToJson(err),
         }, 400)
+    } finally {
+        await wallet.cleanupConnections();
     }
 })
 
@@ -63,7 +64,6 @@ app.openapi(transferRoute, async (c) => {
             amountSats: c.req.valid('json').amountSats,
             receiverSparkAddress: c.req.valid('json').receiverSparkAddress,
         })
-        await wallet.cleanupConnections();
         return c.json(
             {
                 id: id,
@@ -74,6 +74,8 @@ app.openapi(transferRoute, async (c) => {
         return c.json({
             error: unknownErrorToJson(err),
         }, 400)
+    } finally {
+        await wallet.cleanupConnections();
     }
 })
 
@@ -86,7 +88,6 @@ app.openapi(tokenTransferRoute, async (c) => {
             tokenAmount: BigInt(c.req.valid('json').tokenAmount),
             receiverSparkAddress: c.req.valid('json').receiverSparkAddress,
         })
-        await wallet.cleanupConnections();
         return c.json(
             {
                 id: id,
@@ -97,6 +98,8 @@ app.openapi(tokenTransferRoute, async (c) => {
         return c.json({
             error: unknownErrorToJson(err),
         }, 400)
+    } finally {
+        await wallet.cleanupConnections();
     }
 })
 
@@ -108,7 +111,6 @@ app.openapi(payLightningInvoiceRoute, async (c) => {
             invoice: c.req.valid('json').invoice,
             maxFeeSats: c.req.valid('json').maxFeeSats,
         })
-        await wallet.cleanupConnections();
         return c.json({
             id: id,
         }, 200)
@@ -116,19 +118,28 @@ app.openapi(payLightningInvoiceRoute, async (c) => {
         return c.json({
             error: unknownErrorToJson(err),
         }, 400)
+    } finally {
+        await wallet.cleanupConnections();
     }
 })
 
 app.openapi(createLightningInvoiceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network } = c.req.valid('header')
     const wallet = await loadWallet({ mnemonic, network, waitForSync: false })
-    const { invoice } = await wallet.createLightningInvoice({
-        amountSats: c.req.valid('json').amount,
-        memo: c.req.valid('json').memo,
-        expirySeconds: c.req.valid('json').expirySeconds,
-    })
-    await wallet.cleanupConnections();
-    return c.json({
-        invoice: invoice.encodedInvoice,
-    }, 200)
+    try {
+        const { invoice } = await wallet.createLightningInvoice({
+            amountSats: c.req.valid('json').amount,
+            memo: c.req.valid('json').memo,
+            expirySeconds: c.req.valid('json').expirySeconds,
+        })
+        return c.json({
+            invoice: invoice.encodedInvoice,
+        }, 200)
+    } catch (err: unknown) {
+        return c.json({
+            error: unknownErrorToJson(err),
+        }, 400)
+    } finally {
+        await wallet.cleanupConnections();
+    }
 })

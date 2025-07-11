@@ -34,6 +34,16 @@ export const createLightningInvoiceRoute = createRoute({
             },
             description: 'Create a lightning invoice',
         },
+        400: {
+            content: {
+                'application/json': {
+                    schema: z.object({
+                        error: z.string(),
+                    }),
+                },
+            },
+            description: 'Error',
+        },
     },
     tags: ["Wallet"],
 })
