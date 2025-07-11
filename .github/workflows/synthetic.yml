@@ -6,58 +6,30 @@ on:
   pull_request:
     paths:
       - '.github/workflows/synthetic.yml'
+      - 'examples/synthetic.py'
 
 jobs:
   transfer:
     runs-on: ubuntu-latest
     steps:
-      - name: First Transfer
-        id: transfer1
-        run: |
-          RESPONSE=$(curl -X 'POST' \
-            'https://sparkproxy.kevz.dev/wallet/transfer' \
-            -H 'accept: application/json' \
-            -H 'spark-network: MAINNET' \
-            -H 'spark-mnemonic: ${{ secrets.MNEMONIC1 }}' \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "amountSats": 10,
-              "receiverSparkAddress": "sp1pgssy82evtkl8awdw78xn6qpqzl2280dn5r7vrddc94ls3zyy6hnk38kpnceqj"
-            }')
-          HTTP_STATUS=$?
-          echo "Response: $RESPONSE"
-          if [ $HTTP_STATUS -ne 0 ] || [[ "$RESPONSE" == *"error"* ]]; then
-            echo "transfer1_failed=true" >> $GITHUB_ENV
-          fi
+      - uses: actions/checkout@v3
 
-      - name: Wait 10 seconds
-        run: |
-          sleep 10
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-      - name: Second Transfer
-        id: transfer2
+      - name: Install dependencies
         run: |
-          RESPONSE=$(curl -X 'POST' \
-            'https://sparkproxy.kevz.dev/wallet/transfer' \
-            -H 'accept: application/json' \
-            -H 'spark-network: MAINNET' \
-            -H 'spark-mnemonic: ${{ secrets.MNEMONIC2 }}' \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "amountSats": 10,
-              "receiverSparkAddress": "sp1pgssxqwfs4xpuxamjq46zzys06gmxqt405945wyuwswfwwjvj2jxs4256chr5k"
-            }')
-          HTTP_STATUS=$?
-          echo "Response: $RESPONSE"
-          if [ $HTTP_STATUS -ne 0 ] || [[ "$RESPONSE" == *"error"* ]]; then
-            echo "transfer2_failed=true" >> $GITHUB_ENV
-          fi
+          python -m pip install --upgrade pip
+          pip install requests
 
-      - name: Send Slack Notification
-        if: env.transfer1_failed == 'true' || env.transfer2_failed == 'true'
-        run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data '{
-              "text": "⚠️ Alert: Spark Synthetic Tests Failed!"
-            }' \
-            ${{ secrets.SLACK_WEBHOOK }}
+      - name: Run synthetic tests
+        env:
+          MNEMONIC1: ${{ secrets.MNEMONIC1 }}
+          MNEMONIC2: ${{ secrets.MNEMONIC2 }}
+          ADDRESS1: ${{ secrets.ADDRESS1 }}
+          ADDRESS2: ${{ secrets.ADDRESS2 }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          BLINK_API_KEY: ${{ secrets.BLINK_API_KEY }}
+        run: python examples/synthetic.py
