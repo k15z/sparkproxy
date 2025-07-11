@@ -89,6 +89,12 @@ async function isOfferMet(wallet: SparkWallet, offers: z.infer<typeof OfferSchem
     }
 }
 
+/**
+ * Send a signed webhook to the webhook URL.
+ * 
+ * @param webhookURL The URL to send the webhook to.
+ * @param payload The payload to send.
+ */
 async function sendWebhook(webhookURL: string, payload: string) {
     const sign = crypto.createSign('SHA256');
     sign.update(payload);
@@ -106,38 +112,6 @@ async function sendWebhook(webhookURL: string, payload: string) {
         }),
     })
 }
-
-const scanInvoices = async () => {
-    const invoices = await db.select().from(invoicesTable).where(and(eq(invoicesTable.paid, false), gt(invoicesTable.expires_at, new Date())))
-    console.log(`Found ${invoices.length} invoices to check`)
-    for (const invoice of invoices) {
-        console.log(`Checking invoice ${invoice.id}`)
-
-        // First, we'll check the SparkScan API to see if there are any transactions since it's much faster than initializing the wallet.
-        const result = await fetch(`https://api.sparkscan.io/v1/address/${invoice.spark_address}?network=${invoice.network}`)
-        const data = await result.json()
-        if (data['transactionCount'] == 0) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-            continue // No transactions yet.
-        }
-
-        // If there are transactions, we'll check if the offer condition have been met.
-        const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network })
-        const offerStatus = await isOfferMet(wallet, JSON.parse(invoice.offers_json))
-        if (offerStatus.paid) {
-            await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
-            await transferAll(wallet, invoice.sweep_address)
-            if (invoice.webhook_url) {
-                await sendWebhook(invoice.webhook_url, JSON.stringify({
-                    invoice_id: invoice.id,
-                    paid: true,
-                }))
-            }
-        }
-    }
-    setTimeout(scanInvoices, 5000)
-}
-scanInvoices()
 
 app.openapi(createInvoiceRoute, async (c) => {
     const { mnemonic, wallet } = await SparkWallet.initialize({
@@ -175,18 +149,18 @@ app.openapi(createInvoiceRoute, async (c) => {
         spark_address: sparkAddress,
         lightning_invoice: invoice,
         paid: false,
-    })
+    }).returning({ id: invoicesTable.id });
 
     await wallet.cleanupConnections()
     return c.json({
-        invoice_id: Number(result.lastInsertRowid),
+        invoice_id: result[0].id,
         spark_address: sparkAddress,
         lightning_invoice: invoice,
     }, 200)
 })
 
 app.openapi(checkInvoiceRoute, async (c) => {
-    const invoice = await db.select().from(invoicesTable).where(eq(invoicesTable.id, Number(c.req.valid('param').invoice_id))).limit(1)
+    const invoice = await db.select().from(invoicesTable).where(eq(invoicesTable.id, c.req.valid('param').invoice_id)).limit(1)
     if (invoice.length === 0) {
         return c.json({ error: 'Invoice not found' }, 404)
     }
@@ -197,3 +171,38 @@ app.openapi(checkInvoiceRoute, async (c) => {
         sending_address: result.sending_address,
     }, 200)
 })
+
+/**
+ * Scan the unpaid invoices in the database to see if they have been paid.
+ */
+async function scanInvoices() {
+    const invoices = await db.select().from(invoicesTable).where(and(eq(invoicesTable.paid, false), gt(invoicesTable.expires_at, new Date())))
+    for (const invoice of invoices) {
+        console.log(`Checking invoice ${invoice.id}`)
+
+        // First, we'll check the SparkScan API to see if there are any transactions since it's much faster than initializing the wallet.
+        const result = await fetch(`https://api.sparkscan.io/v1/address/${invoice.spark_address}?network=${invoice.network}`)
+        const data = await result.json()
+        if (data['transactionCount'] == 0) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            continue // No transactions yet.
+        }
+
+        // If there are transactions, we'll check if the offer condition have been met.
+        const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network })
+        const offerStatus = await isOfferMet(wallet, JSON.parse(invoice.offers_json))
+        if (offerStatus.paid) {
+            await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
+            await transferAll(wallet, invoice.sweep_address)
+            if (invoice.webhook_url) {
+                await sendWebhook(invoice.webhook_url, JSON.stringify({
+                    invoice_id: invoice.id,
+                    paid: true,
+                }))
+            }
+        }
+    }
+    setTimeout(scanInvoices, 5000)
+}
+
+scanInvoices()

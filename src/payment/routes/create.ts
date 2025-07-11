@@ -16,7 +16,7 @@ export const CreateInputSchema = z
 
 export const CreateOutputSchema = z
     .object({
-        invoice_id: z.number(),
+        invoice_id: z.string(),
         spark_address: z.string(),
         lightning_invoice: z.string(),
     })

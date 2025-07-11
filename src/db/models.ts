@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { randomUUID } from 'crypto';
 
 export const invoicesTable = sqliteTable("invoices_table", {
-  id: int().primaryKey({ autoIncrement: true }),
+  id: text('id', { length: 36 }).primaryKey().$defaultFn(() => randomUUID()),
   created_at: int({
     mode: 'timestamp_ms',
   }).notNull().default(sql`CURRENT_TIMESTAMP`),

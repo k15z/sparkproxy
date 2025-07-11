@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi"
 import { createRoute } from "@hono/zod-openapi"
 
 export const CheckInvoiceSchema = z.object({
-    invoice_id: z.number(),
+    invoice_id: z.string(),
     paid: z.boolean(),
     sending_address: z.string().nullable(),
 })
