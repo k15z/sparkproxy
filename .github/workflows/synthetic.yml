@@ -1,7 +1,8 @@
 name: Synthetic Tests
 on:
+  workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'  # Run every 15 minutes
+    - cron: '0,15,30,45 * * * *'
   pull_request:
     paths:
       - '.github/workflows/synthetic.yml'
@@ -20,7 +21,7 @@ jobs:
             -H 'spark-mnemonic: ${{ secrets.MNEMONIC1 }}' \
             -H 'Content-Type: application/json' \
             -d '{
-              "amountSats": 17,
+              "amountSats": 10,
               "receiverSparkAddress": "sp1pgssy82evtkl8awdw78xn6qpqzl2280dn5r7vrddc94ls3zyy6hnk38kpnceqj"
             }')
           HTTP_STATUS=$?
@@ -28,6 +29,10 @@ jobs:
           if [ $HTTP_STATUS -ne 0 ] || [[ "$RESPONSE" == *"error"* ]]; then
             echo "transfer1_failed=true" >> $GITHUB_ENV
           fi
+
+      - name: Wait 10 seconds
+        run: |
+          sleep 10
 
       - name: Second Transfer
         id: transfer2
@@ -39,7 +44,7 @@ jobs:
             -H 'spark-mnemonic: ${{ secrets.MNEMONIC2 }}' \
             -H 'Content-Type: application/json' \
             -d '{
-              "amountSats": 21,
+              "amountSats": 10,
               "receiverSparkAddress": "sp1pgssxqwfs4xpuxamjq46zzys06gmxqt405945wyuwswfwwjvj2jxs4256chr5k"
             }')
           HTTP_STATUS=$?
