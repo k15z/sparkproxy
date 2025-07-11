@@ -2,7 +2,7 @@ name: Synthetic Tests
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0,30 * * * *'
+    - cron: '15,45 * * * *'
   pull_request:
     paths:
       - '.github/workflows/synthetic.yml'
