@@ -1,7 +1,7 @@
 import { SparkWallet } from '@buildonspark/spark-sdk'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute } from './routes'
-import { loadWallet } from '../utils'
+import { loadWallet, unknownErrorToJson } from '../utils'
 
 export const app = new OpenAPIHono()
 
@@ -48,9 +48,9 @@ app.openapi(balanceRoute, async (c) => {
             },
             200
         )
-    } catch (e) {
+    } catch (err: unknown) {
         return c.json({
-            error: JSON.stringify(e),
+            error: unknownErrorToJson(err),
         }, 400)
     }
 })
@@ -70,9 +70,9 @@ app.openapi(transferRoute, async (c) => {
             },
             200
         )
-    } catch (e) {
+    } catch (err: unknown) {
         return c.json({
-            error: JSON.stringify(e),
+            error: unknownErrorToJson(err),
         }, 400)
     }
 })
@@ -93,9 +93,9 @@ app.openapi(tokenTransferRoute, async (c) => {
             },
             200
         )
-    } catch (e) {
+    } catch (err: unknown) {
         return c.json({
-            error: JSON.stringify(e),
+            error: unknownErrorToJson(err),
         }, 400)
     }
 })
@@ -112,9 +112,9 @@ app.openapi(payLightningInvoiceRoute, async (c) => {
         return c.json({
             id: id,
         }, 200)
-    } catch (e) {
+    } catch (err: unknown) {
         return c.json({
-            error: JSON.stringify(e),
+            error: unknownErrorToJson(err),
         }, 400)
     }
 })

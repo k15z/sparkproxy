@@ -1,5 +1,7 @@
 # sparkproxy
 
+[![Synthetic Tests](https://github.com/k15z/sparkproxy/actions/workflows/synthetic.yml/badge.svg)](https://github.com/k15z/sparkproxy/actions/workflows/synthetic.yml)
+
 This service provides an OpenAPI-compatible API for interacting with Spark. It supports multiple 
 wallets and multiple assets, with the goal of exposing all the functionality of the Javascript 
 Spark SDK over a REST API so you can use Spark without JS.

@@ -1,7 +1,9 @@
+import sys
 import os
 import time
 import requests
 import logging
+from random import randint
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ def send_slack_notification(failed_tests):
     else:
         logger.error("SLACK_WEBHOOK is not set. No notification sent.")
 
-def make_transfer(mnemonic, receiver_address):
+def make_transfer(mnemonic, receiver_address, amount_sats):
     response = requests.post(
         "https://sparkproxy.kevz.dev/wallet/transfer",
         headers={
@@ -34,17 +36,16 @@ def make_transfer(mnemonic, receiver_address):
             "Content-Type": "application/json"
         },
         json={
-            "amountSats": 10,
+            "amountSats": amount_sats,
             "receiverSparkAddress": receiver_address
         }
     )
-    print(response.text)
-    
+    logger.info(f"Spark transfer response: {response.text}")
     return response.ok and "error" not in response.text
 
-def check_blink_lightning():
-    """Check bidirectional lightning payments between Spark and Blink"""
-    logger.info("Starting bidirectional lightning payment test between Spark and Blink")
+def check_blink_lightning(amount_sats: int):
+    """Check lightning payments between Spark and Blink"""
+    logger.info(f"Starting lightning payment test between Spark and Blink for {amount_sats} sats")
 
     # Create Spark invoice
     logger.info("Creating Spark lightning invoice")
@@ -57,7 +58,7 @@ def check_blink_lightning():
             "Content-Type": "application/json"
         },
         json={
-            "amount": 10,
+            "amount": amount_sats,
             "memo": "Spark->Blink test",
             "expirySeconds": 86400
         }
@@ -109,7 +110,7 @@ def check_blink_lightning():
             "query": "mutation LnInvoiceCreate($input: LnInvoiceCreateInput!) {\n  lnInvoiceCreate(input: $input) {\n    invoice {\n      paymentRequest\n      paymentHash\n      paymentSecret\n      satoshis\n    }\n    errors {\n      message\n    }\n  }\n}",
             "variables": {
                 "input": {
-                    "amount": "10",
+                    "amount": amount_sats,
                     "walletId": "c4a7c8f6-1ed6-4246-9715-e92222e9a87f"
                 }
             }
@@ -149,12 +150,14 @@ def check_blink_lightning():
 
 def check_spark_transfer():
     """Check Spark transfer between two addresses"""
-    logger.info("Starting Spark transfer test between two addresses")
+    amount_sats = randint(10, 100)
+    logger.info(f"Starting transfer test between two Spark wallets for {amount_sats} sats")
 
     # First transfer
     success = make_transfer(
         os.environ["MNEMONIC1"],
-        os.environ["ADDRESS2"]
+        os.environ["ADDRESS2"],
+        amount_sats
     )
     if not success:
         logger.error("Failed to make first Spark transfer")
@@ -162,16 +165,21 @@ def check_spark_transfer():
     
     # Wait between transfers
     time.sleep(10)
-    
+
     # Second transfer  
     success = make_transfer(
         os.environ["MNEMONIC2"],
-        os.environ["ADDRESS1"]
+        os.environ["ADDRESS1"],
+        amount_sats
     )
     if not success:
         logger.error("Failed to make second Spark transfer")
         return False
 
+    # Wait between transfers
+    time.sleep(10)
+
+    logger.info("Successfully completed Spark transfer test")
     return True
 
 def main():
@@ -179,12 +187,13 @@ def main():
     
     if not check_spark_transfer():
         failed_tests.append("spark_transfer")
-    if not check_blink_lightning():
+    if not check_blink_lightning(randint(10, 20)):
         failed_tests.append("blink_lightning")
 
     # Send detailed notification if any tests failed
     if failed_tests:
         send_slack_notification(failed_tests)
+        sys.exit(1)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

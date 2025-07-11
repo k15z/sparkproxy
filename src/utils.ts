@@ -33,8 +33,26 @@ export async function loadWallet({
             setTimeout(() => {
                 console.warn('Timeout reached, resolving');
                 resolve(true);
-            }, 10000);
+            }, 5000);
         })
     }
     return wallet;
+}
+
+/**
+ * Converts an unknown error to a JSON string.
+ * 
+ * @param err - The error to convert.
+ * @returns The JSON string.
+ */
+export function unknownErrorToJson(err: unknown): string {
+    if (err instanceof Error) {
+        return JSON.stringify({
+            name: err.name,
+            message: err.message,
+            stack: err.stack
+        })
+    } else {
+        return JSON.stringify(err)
+    }
 }
