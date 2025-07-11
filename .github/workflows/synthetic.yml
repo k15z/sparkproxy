@@ -1,0 +1,58 @@
+name: Synthetic Tests
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Run every 15 minutes
+  pull_request:
+    paths:
+      - '.github/workflows/synthetic.yml'
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: First Transfer
+        id: transfer1
+        run: |
+          RESPONSE=$(curl -X 'POST' \
+            'https://sparkproxy.kevz.dev/wallet/transfer' \
+            -H 'accept: application/json' \
+            -H 'spark-network: MAINNET' \
+            -H 'spark-mnemonic: ${{ secrets.MNEMONIC1 }}' \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "amountSats": 17,
+              "receiverSparkAddress": "sp1pgssy82evtkl8awdw78xn6qpqzl2280dn5r7vrddc94ls3zyy6hnk38kpnceqj"
+            }')
+          HTTP_STATUS=$?
+          echo "Response: $RESPONSE"
+          if [ $HTTP_STATUS -ne 0 ] || [[ "$RESPONSE" == *"error"* ]]; then
+            echo "transfer1_failed=true" >> $GITHUB_ENV
+          fi
+
+      - name: Second Transfer
+        id: transfer2
+        run: |
+          RESPONSE=$(curl -X 'POST' \
+            'https://sparkproxy.kevz.dev/wallet/transfer' \
+            -H 'accept: application/json' \
+            -H 'spark-network: MAINNET' \
+            -H 'spark-mnemonic: ${{ secrets.MNEMONIC2 }}' \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "amountSats": 21,
+              "receiverSparkAddress": "sp1pgssxqwfs4xpuxamjq46zzys06gmxqt405945wyuwswfwwjvj2jxs4256chr5k"
+            }')
+          HTTP_STATUS=$?
+          echo "Response: $RESPONSE"
+          if [ $HTTP_STATUS -ne 0 ] || [[ "$RESPONSE" == *"error"* ]]; then
+            echo "transfer2_failed=true" >> $GITHUB_ENV
+          fi
+
+      - name: Send Slack Notification
+        if: env.transfer1_failed == 'true' || env.transfer2_failed == 'true'
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "⚠️ Alert: Spark Synthetic Tests Failed!"
+            }' \
+            ${{ secrets.SLACK_WEBHOOK }}
