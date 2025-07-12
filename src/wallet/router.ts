@@ -29,21 +29,19 @@ app.openapi(balanceRoute, async (c) => {
             {
                 address: await wallet.getSparkAddress(),
                 balance: Number(balance),
-                tokenBalances: Object.fromEntries(
-                    Array.from(tokenBalances.entries()).map(([tokenPublicKey, tokenBalance]) => [
-                        tokenPublicKey,
-                        {
-                            balance: Number(tokenBalance.balance),
-                            tokenInfo: {
-                                tokenPublicKey: tokenBalance.tokenInfo.tokenPublicKey,
-                                tokenName: tokenBalance.tokenInfo.tokenName,
-                                tokenSymbol: tokenBalance.tokenInfo.tokenSymbol,
-                                tokenDecimals: tokenBalance.tokenInfo.tokenDecimals,
-                                maxSupply: Number(tokenBalance.tokenInfo.maxSupply),
-                            },
+                tokenBalances: Array.from(tokenBalances.entries()).map(([tokenIdentifier, tokenBalance]) => {
+                    return {
+                        balance: Number(tokenBalance.balance),
+                        tokenInfo: {
+                            tokenIdentifier: tokenIdentifier,
+                            tokenPublicKey: tokenBalance.tokenMetadata.tokenPublicKey,
+                            tokenName: tokenBalance.tokenMetadata.tokenName,
+                            tokenSymbol: tokenBalance.tokenMetadata.tokenTicker,
+                            tokenDecimals: tokenBalance.tokenMetadata.decimals,
+                            maxSupply: Number(tokenBalance.tokenMetadata.maxSupply),
                         },
-                    ])
-                ),
+                    }
+                }),
             },
             200
         )

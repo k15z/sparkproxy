@@ -7,9 +7,10 @@ export const BalanceSchema = z
     .object({
         address: z.string(),
         balance: z.number(),
-        tokenBalances: z.record(z.string(), z.object({
+        tokenBalances: z.array(z.object({
             balance: z.number(),
             tokenInfo: z.object({
+                tokenIdentifier: z.string(),
                 tokenPublicKey: z.string(),
                 tokenName: z.string(),
                 tokenSymbol: z.string(),

@@ -32,9 +32,9 @@ async function transferAll(senderWallet: SparkWallet, receiverSparkAddress: stri
         console.log(info)
     }
     balance.tokenBalances.forEach(async (tokenBalance) => {
-        console.log(`Transferring ${tokenBalance.balance} ${tokenBalance.tokenInfo.tokenName} tokens to ${receiverSparkAddress}`)
+        console.log(`Transferring ${tokenBalance.balance} ${tokenBalance.tokenMetadata.tokenName} tokens to ${receiverSparkAddress}`)
         await senderWallet.transferTokens({
-            tokenPublicKey: tokenBalance.tokenInfo.tokenPublicKey,
+            tokenPublicKey: tokenBalance.tokenMetadata.tokenPublicKey,
             tokenAmount: tokenBalance.balance,
             receiverSparkAddress: receiverSparkAddress,
         })
@@ -49,7 +49,7 @@ async function transferAll(senderWallet: SparkWallet, receiverSparkAddress: stri
  * @param network The network to use.
  * @param offers The offers to check.
  */
-async function isOfferMet(wallet: SparkWallet, offers: z.infer<typeof OfferSchema>[]) {
+async function isOfferMet(wallet: SparkWallet, network: keyof typeof Network, offers: z.infer<typeof OfferSchema>[]) {
     const balance = await wallet.getBalance()
     for (const offer of offers) {
         if (offer.asset === "BITCOIN") {
@@ -62,7 +62,7 @@ async function isOfferMet(wallet: SparkWallet, offers: z.infer<typeof OfferSchem
                                 paid: true,
                                 sending_address: encodeSparkAddress({
                                     identityPublicKey: transfer.senderIdentityPublicKey,
-                                    network: 'MAINNET',
+                                    network: network,
                                 }),
                             }
                         }
@@ -74,8 +74,27 @@ async function isOfferMet(wallet: SparkWallet, offers: z.infer<typeof OfferSchem
                 }
             }
         } else if (offer.asset === "TOKEN") {
-            const tokenBalance = balance.tokenBalances.get(offer.token_pubkey)
+            const tokenBalance = Object.values(balance.tokenBalances).find(tokenBalance => tokenBalance.tokenMetadata.tokenPublicKey === offer.token_pubkey)
             if (tokenBalance && tokenBalance.balance >= offer.amount) {
+                // TODO: Check natively using the SDK once it's added. For now, we'll use the SparkScan API.
+                const result = await fetch(`https://api.sparkscan.io/v1/address/${await wallet.getSparkAddress()}/transactions?network=${network}&limit=25&offset=0`, {
+                    headers: {
+                        'accept': 'application/json'
+                    }
+                });
+                const transactions = (await result.json()).data;
+                if (transactions.length > 0) {
+                    for (const tx of transactions) {
+                        if (tx.type === 'token_transfer' &&
+                            tx.direction === 'incoming' &&
+                            tx.tokenMetadata?.pubkey === offer.token_pubkey) {
+                            return {
+                                paid: true,
+                                sending_address: tx.counterparty?.identifier
+                            }
+                        }
+                    }
+                }
                 return {
                     paid: true,
                     sending_address: null,
@@ -190,7 +209,7 @@ async function scanInvoices() {
 
         // If there are transactions, we'll check if the offer condition have been met.
         const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network })
-        const offerStatus = await isOfferMet(wallet, JSON.parse(invoice.offers_json))
+        const offerStatus = await isOfferMet(wallet, invoice.network as keyof typeof Network, JSON.parse(invoice.offers_json))
         if (offerStatus.paid) {
             await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
             await transferAll(wallet, invoice.sweep_address)
