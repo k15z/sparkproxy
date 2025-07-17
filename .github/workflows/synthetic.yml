@@ -24,12 +24,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run synthetic tests
+      - name: Run synthetic tests (prod)
         env:
           MNEMONIC1: ${{ secrets.MNEMONIC1 }}
           MNEMONIC2: ${{ secrets.MNEMONIC2 }}
           ADDRESS1: ${{ secrets.ADDRESS1 }}
           ADDRESS2: ${{ secrets.ADDRESS2 }}
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           BLINK_API_KEY: ${{ secrets.BLINK_API_KEY }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         run: python examples/synthetic.py
+
+      - name: Sleep for 30 seconds
+        run: sleep 30
+
+      - name: Run synthetic tests (dev)
+        env:
+          MNEMONIC1: ${{ secrets.MNEMONIC1 }}
+          MNEMONIC2: ${{ secrets.MNEMONIC2 }}
+          ADDRESS1: ${{ secrets.ADDRESS1 }}
+          ADDRESS2: ${{ secrets.ADDRESS2 }}
+          BLINK_API_KEY: ${{ secrets.BLINK_API_KEY }}
+          SLACK_WEBHOOK: ${{ secrets.DEV_SLACK_WEBHOOK }}
+        run: python examples/synthetic.py --dev
