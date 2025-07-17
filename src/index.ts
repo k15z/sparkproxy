@@ -5,6 +5,7 @@ import { app as walletRouter } from './wallet/router'
 import { app as paymentRouter } from './payment/router'
 import { swaggerUI } from '@hono/swagger-ui'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { executionTimes } from './utils'
 
 const app = new OpenAPIHono()
 
@@ -18,6 +19,10 @@ app.doc("/openapi.json", {
     title: "SparkProxy API",
   },
 });
+
+app.get("/metrics", (c) => {
+  return c.json(executionTimes, 200)
+})
 
 app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 

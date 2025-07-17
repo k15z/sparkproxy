@@ -1,7 +1,7 @@
 import { SparkWallet } from '@buildonspark/spark-sdk'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute } from './routes'
-import { loadWallet, unknownErrorToJson, devSparkConfig } from '../utils'
+import { loadWallet, unknownErrorToJson, devSparkConfig, trackExecutionTime } from '../utils'
 
 export const app = new OpenAPIHono()
 
@@ -23,9 +23,9 @@ app.openapi(initializeRoute, async (c) => {
 
 app.openapi(balanceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await loadWallet({ mnemonic, network, environment })
+    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const { balance, tokenBalances } = await wallet.getBalance()
+        const { balance, tokenBalances } = await trackExecutionTime("getBalance", () => wallet.getBalance())
         return c.json(
             {
                 address: await wallet.getSparkAddress(),
@@ -57,12 +57,12 @@ app.openapi(balanceRoute, async (c) => {
 
 app.openapi(transferRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await loadWallet({ mnemonic, network, environment })
+    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const { id } = await wallet.transfer({
+        const { id } = await trackExecutionTime("transfer", () => wallet.transfer({
             amountSats: c.req.valid('json').amountSats,
             receiverSparkAddress: c.req.valid('json').receiverSparkAddress,
-        })
+        }))
         return c.json(
             {
                 id: id,
@@ -80,13 +80,13 @@ app.openapi(transferRoute, async (c) => {
 
 app.openapi(tokenTransferRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await loadWallet({ mnemonic, network, environment })
+    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const id = await wallet.transferTokens({
+        const id = await trackExecutionTime("transferTokens", () => wallet.transferTokens({
             tokenPublicKey: c.req.valid('json').tokenPublicKey,
             tokenAmount: BigInt(c.req.valid('json').tokenAmount),
             receiverSparkAddress: c.req.valid('json').receiverSparkAddress,
-        })
+        }))
         return c.json(
             {
                 id: id,
@@ -104,12 +104,12 @@ app.openapi(tokenTransferRoute, async (c) => {
 
 app.openapi(payLightningInvoiceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await loadWallet({ mnemonic, network, environment })
+    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const { id } = await wallet.payLightningInvoice({
+        const { id } = await trackExecutionTime("payLightningInvoice", () => wallet.payLightningInvoice({
             invoice: c.req.valid('json').invoice,
             maxFeeSats: c.req.valid('json').maxFeeSats,
-        })
+        }))
         return c.json({
             id: id,
         }, 200)
@@ -124,13 +124,13 @@ app.openapi(payLightningInvoiceRoute, async (c) => {
 
 app.openapi(createLightningInvoiceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await loadWallet({ mnemonic, network, environment, waitForSync: false })
+    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment, waitForSync: false }))
     try {
-        const { invoice } = await wallet.createLightningInvoice({
+        const { invoice } = await trackExecutionTime("createLightningInvoice", () => wallet.createLightningInvoice({
             amountSats: c.req.valid('json').amount,
             memo: c.req.valid('json').memo,
             expirySeconds: c.req.valid('json').expirySeconds,
-        })
+        }))
         return c.json({
             invoice: invoice.encodedInvoice,
         }, 200)

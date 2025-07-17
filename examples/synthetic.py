@@ -30,10 +30,12 @@ def send_slack_notification(environment, errors):
     error_details = []
     for error in errors:
         if "DOCTYPE html" in error.details:
-            return  # Not reporting Heroku timeout errors to Slack
+            continue  # Not reporting Heroku timeout errors to Slack
         error_details.append(
             f"- {error.test_name}: {error.operation} - {error.details[:100]}"
         )
+    if not error_details:
+        return
 
     message = (
         f":alert: {environment.title()} Spark Synthetic Tests Failed!\n\nErrors:\n"
@@ -139,7 +141,8 @@ def check_blink_lightning(environment, amount_sats: int):
         )
 
     # Wait for Blink to pay the Spark invoice
-    time.sleep(10)
+    logger.info("Waiting 20 seconds for Blink to pay the Spark invoice")
+    time.sleep(20)
 
     # Create Blink invoice
     logger.info("Creating Blink lightning invoice")
@@ -206,13 +209,14 @@ def check_blink_lightning(environment, amount_sats: int):
 
 def check_spark_transfer(environment):
     """Check Spark transfer between two addresses"""
-    amount_sats = randint(10, 100)
+    amount_sats = randint(50, 200)
     logger.info(
         f"Starting transfer test between two Spark wallets for {amount_sats} sats"
     )
 
     # First transfer
     try:
+        logger.info(f"Making transfer from {os.environ['ADDRESS1']} to {os.environ['ADDRESS2']} for {amount_sats} sats")
         make_transfer(
             environment,
             os.environ["MNEMONIC1"],
@@ -223,10 +227,12 @@ def check_spark_transfer(environment):
         raise e
 
     # Wait between transfers
-    time.sleep(10)
+    logger.info("Waiting 20 seconds between transfers")
+    time.sleep(20)
 
     # Second transfer
     try:
+        logger.info(f"Making transfer from {os.environ['ADDRESS2']} to {os.environ['ADDRESS1']} for {amount_sats} sats")
         make_transfer(
             environment,
             os.environ["MNEMONIC2"],
@@ -237,9 +243,8 @@ def check_spark_transfer(environment):
         raise e
 
     # Wait between transfers
-    time.sleep(10)
-
     logger.info("Successfully completed Spark transfer test")
+    time.sleep(20)
     return True
 
 
