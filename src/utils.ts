@@ -1,5 +1,7 @@
 import { Network, SparkWallet } from "@buildonspark/spark-sdk";
 
+export const devSparkConfig = JSON.parse(Buffer.from(process.env.DEV_SPARK_CONFIG!, 'base64').toString())
+
 /**
  * Loads a Spark wallet and waits for it to sync if `waitForSync` is true.
  * 
@@ -13,16 +15,19 @@ import { Network, SparkWallet } from "@buildonspark/spark-sdk";
 export async function loadWallet({
     mnemonic,
     network,
+    environment,
     waitForSync = true,
 }: {
     mnemonic: string;
     network: keyof typeof Network;
+    environment: 'dev' | 'prod';
     waitForSync?: boolean;
 }): Promise<SparkWallet> {
     const { wallet } = await SparkWallet.initialize({
         mnemonicOrSeed: mnemonic,
         options: {
             network: network,
+            ...(environment === 'dev' ? devSparkConfig : {}),
         },
     })
     if (waitForSync) {

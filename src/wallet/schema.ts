@@ -4,6 +4,9 @@ export const SparkNetworkSchema = z.object({
     'spark-network': z.enum(['MAINNET', 'REGTEST']).openapi({
         example: 'MAINNET',
     }),
+    'spark-environment': z.enum(['dev', 'prod']).openapi({
+        example: 'prod',
+    }).default('prod'),
 })
 
 export const SparkMnemonicSchema = z.object({
