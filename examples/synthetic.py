@@ -29,6 +29,8 @@ def send_slack_notification(environment, errors):
     # Build error message detailing which tests failed
     error_details = []
     for error in errors:
+        if "DOCTYPE html" in error.details:
+            return  # Not reporting Heroku timeout errors to Slack
         error_details.append(
             f"- {error.test_name}: {error.operation} - {error.details[:100]}"
         )
@@ -61,7 +63,7 @@ def make_transfer(environment, mnemonic, receiver_address, amount_sats):
     logger.info(f"Spark transfer response: {response.text}")
     if "error" in response.text:
         raise SyntheticTestError(
-            test_name="Spark transfer",
+            test_name="Spark",
             operation="transfer",
             details=response.text,
             original_error=Exception(f"Spark transfer failed: {response.text}"),
@@ -96,8 +98,8 @@ def check_blink_lightning(environment, amount_sats: int):
 
     if not spark_invoice_response.ok:
         raise SyntheticTestError(
-            test_name="Spark invoice",
-            operation="create",
+            test_name="Spark",
+            operation="create_spark_invoice",
             details=spark_invoice_response.text,
             original_error=Exception(
                 f"Failed to create Spark invoice: {spark_invoice_response.text}"
@@ -128,8 +130,8 @@ def check_blink_lightning(environment, amount_sats: int):
 
     if not blink_pay_response.ok:
         raise SyntheticTestError(
-            test_name="Blink payment",
-            operation="pay",
+            test_name="Lightning",
+            operation="pay_spark_invoice",
             details=blink_pay_response.text,
             original_error=Exception(
                 f"Failed to have Blink pay Spark invoice: {blink_pay_response.text}"
@@ -161,8 +163,8 @@ def check_blink_lightning(environment, amount_sats: int):
 
     if not blink_invoice_response.ok:
         raise SyntheticTestError(
-            test_name="Blink invoice",
-            operation="create",
+            test_name="Lightning",
+            operation="create_blink_invoice",
             details=blink_invoice_response.text,
             original_error=Exception(
                 f"Failed to create Blink invoice: {blink_invoice_response.text}"
@@ -190,8 +192,8 @@ def check_blink_lightning(environment, amount_sats: int):
 
     if not spark_pay_response.ok:
         raise SyntheticTestError(
-            test_name="Spark payment",
-            operation="pay",
+            test_name="Lightning",
+            operation="pay_blink_invoice",
             details=spark_pay_response.text,
             original_error=Exception(
                 f"Failed to have Spark pay Blink invoice: {spark_pay_response.text}"
