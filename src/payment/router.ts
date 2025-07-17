@@ -208,7 +208,7 @@ async function scanInvoices() {
         }
 
         // If there are transactions, we'll check if the offer condition have been met.
-        const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network })
+        const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network, environment: 'prod' })
         const offerStatus = await isOfferMet(wallet, invoice.network as keyof typeof Network, JSON.parse(invoice.offers_json))
         if (offerStatus.paid) {
             await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))

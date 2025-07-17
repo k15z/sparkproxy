@@ -3,11 +3,13 @@ import os
 import time
 import requests
 import logging
+import argparse
 from random import randint
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-def send_slack_notification(failed_tests):
+def send_slack_notification(environment, failed_tests):
     # Build error message detailing which tests failed
     error_details = []
     if "blink_lightning" in failed_tests:
@@ -15,7 +17,7 @@ def send_slack_notification(failed_tests):
     if "spark_transfer" in failed_tests:
         error_details.append("- Spark transfers between Spark wallets")
         
-    message = "⚠️ Alert: Spark Synthetic Tests Failed!\n\nFailed Tests:\n" + "\n".join(error_details)
+    message = f"⚠️ Alert: {environment.title()} Spark Synthetic Tests Failed!\n\nFailed Tests:\n" + "\n".join(error_details)
     logger.error(message)
     
     payload = {
@@ -26,12 +28,13 @@ def send_slack_notification(failed_tests):
     else:
         logger.error("SLACK_WEBHOOK is not set. No notification sent.")
 
-def make_transfer(mnemonic, receiver_address, amount_sats):
+def make_transfer(environment, mnemonic, receiver_address, amount_sats):
     response = requests.post(
         "https://sparkproxy.kevz.dev/wallet/transfer",
         headers={
             "accept": "application/json",
             "spark-network": "MAINNET", 
+            "spark-environment": environment,
             "spark-mnemonic": mnemonic,
             "Content-Type": "application/json"
         },
@@ -43,7 +46,7 @@ def make_transfer(mnemonic, receiver_address, amount_sats):
     logger.info(f"Spark transfer response: {response.text}")
     return response.ok and "error" not in response.text
 
-def check_blink_lightning(amount_sats: int):
+def check_blink_lightning(environment, amount_sats: int):
     """Check lightning payments between Spark and Blink"""
     logger.info(f"Starting lightning payment test between Spark and Blink for {amount_sats} sats")
 
@@ -54,6 +57,7 @@ def check_blink_lightning(amount_sats: int):
         headers={
             "accept": "application/json", 
             "spark-network": "MAINNET",
+            "spark-environment": environment,
             "spark-mnemonic": os.environ["MNEMONIC1"],
             "Content-Type": "application/json"
         },
@@ -131,6 +135,7 @@ def check_blink_lightning(amount_sats: int):
         headers={
             "accept": "application/json",
             "spark-network": "MAINNET",
+            "spark-environment": "dev",
             "spark-mnemonic": os.environ["MNEMONIC1"],
             "Content-Type": "application/json"
         },
@@ -148,16 +153,17 @@ def check_blink_lightning(amount_sats: int):
     logger.info("Successfully completed bidirectional lightning payments")
     return True
 
-def check_spark_transfer():
+def check_spark_transfer(environment):
     """Check Spark transfer between two addresses"""
     amount_sats = randint(10, 100)
     logger.info(f"Starting transfer test between two Spark wallets for {amount_sats} sats")
 
     # First transfer
     success = make_transfer(
+        environment,
         os.environ["MNEMONIC1"],
         os.environ["ADDRESS2"],
-        amount_sats
+        amount_sats,
     )
     if not success:
         logger.error("Failed to make first Spark transfer")
@@ -168,9 +174,10 @@ def check_spark_transfer():
 
     # Second transfer  
     success = make_transfer(
+        environment,
         os.environ["MNEMONIC2"],
         os.environ["ADDRESS1"],
-        amount_sats
+        amount_sats,
     )
     if not success:
         logger.error("Failed to make second Spark transfer")
@@ -182,19 +189,23 @@ def check_spark_transfer():
     logger.info("Successfully completed Spark transfer test")
     return True
 
-def main():
+def main(environment: Literal["dev", "prod"]):
     failed_tests = []
     
-    if not check_spark_transfer():
+    if not check_spark_transfer(environment):
         failed_tests.append("spark_transfer")
-    if not check_blink_lightning(randint(10, 20)):
+    if not check_blink_lightning(environment, randint(10, 20)):
         failed_tests.append("blink_lightning")
 
     # Send detailed notification if any tests failed
     if failed_tests:
-        send_slack_notification(failed_tests)
+        send_slack_notification(environment, failed_tests)
         sys.exit(1)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dev", action="store_true", default=False)
+    args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    main()
+    print(args.dev)
+    main("dev" if args.dev else "prod")
