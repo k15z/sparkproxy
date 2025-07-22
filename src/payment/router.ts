@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import * as crypto from 'crypto';
-import { Network, SparkWallet } from '@buildonspark/spark-sdk'
-import { encodeSparkAddress } from '@buildonspark/spark-sdk/address';
+import { Network, SparkWallet, encodeSparkAddress } from '@buildonspark/spark-sdk'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { drizzle } from 'drizzle-orm/libsql';
 import { eq, and, gt } from 'drizzle-orm';
