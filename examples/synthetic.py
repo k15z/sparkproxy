@@ -50,9 +50,9 @@ def send_slack_notification(environment, errors):
         logger.error("SLACK_WEBHOOK is not set. No notification sent.")
 
 
-def make_transfer(environment, mnemonic, receiver_address, amount_sats):
+def make_transfer(environment, mnemonic, receiver_address, amount_sats, base_url):
     response = requests.post(
-        "https://sparkproxy.kevz.dev/wallet/transfer",
+        f"{base_url}/wallet/transfer",
         headers={
             "accept": "application/json",
             "spark-network": "MAINNET",
@@ -73,7 +73,7 @@ def make_transfer(environment, mnemonic, receiver_address, amount_sats):
     return response.ok and "error" not in response.text
 
 
-def check_blink_lightning(environment, amount_sats: int):
+def check_blink_lightning(environment, amount_sats: int, base_url: str):
     """Check lightning payments between Spark and Blink"""
     logger.info(
         f"Starting lightning payment test between Spark and Blink for {amount_sats} sats"
@@ -82,7 +82,7 @@ def check_blink_lightning(environment, amount_sats: int):
     # Create Spark invoice
     logger.info("Creating Spark lightning invoice")
     spark_invoice_response = requests.post(
-        "https://sparkproxy.kevz.dev/wallet/lightning/create",
+        f"{base_url}/wallet/lightning/create",
         headers={
             "accept": "application/json",
             "spark-network": "MAINNET",
@@ -181,7 +181,7 @@ def check_blink_lightning(environment, amount_sats: int):
     # Have Spark pay the Blink invoice
     logger.info("Having Spark pay the Blink invoice")
     spark_pay_response = requests.post(
-        "https://sparkproxy.kevz.dev/wallet/lightning/pay",
+        f"{base_url}/wallet/lightning/pay",
         headers={
             "accept": "application/json",
             "spark-network": "MAINNET",
@@ -207,7 +207,7 @@ def check_blink_lightning(environment, amount_sats: int):
     return True
 
 
-def check_spark_transfer(environment):
+def check_spark_transfer(environment, base_url: str):
     """Check Spark transfer between two addresses"""
     amount_sats = randint(50, 200)
     logger.info(
@@ -222,6 +222,7 @@ def check_spark_transfer(environment):
             os.environ["MNEMONIC1"],
             os.environ["ADDRESS2"],
             amount_sats,
+            base_url,
         )
     except SyntheticTestError as e:
         raise e
@@ -238,6 +239,7 @@ def check_spark_transfer(environment):
             os.environ["MNEMONIC2"],
             os.environ["ADDRESS1"],
             amount_sats,
+            base_url,
         )
     except SyntheticTestError as e:
         raise e
@@ -248,15 +250,15 @@ def check_spark_transfer(environment):
     return True
 
 
-def main(environment: Literal["dev", "prod"]):
+def main(environment: Literal["dev", "prod"], base_url: str):
     errors = []
 
     try:
-        check_spark_transfer(environment)
+        check_spark_transfer(environment, base_url)
     except SyntheticTestError as e:
         errors.append(e)
     try:
-        check_blink_lightning(environment, randint(10, 20))
+        check_blink_lightning(environment, randint(10, 20), base_url)
     except SyntheticTestError as e:
         errors.append(e)
 
@@ -269,6 +271,20 @@ def main(environment: Literal["dev", "prod"]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true", default=False)
+    parser.add_argument(
+        "--base-url",
+        default=os.environ.get("SPARKPROXY_URL", "https://sparkproxy.kevz.dev"),
+        help="Base URL for SparkProxy (e.g. http://localhost:3000)",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Shortcut for --base-url http://localhost:3000",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    main("dev" if args.dev else "prod")
+    selected_base_url = (
+        "http://localhost:3000" if args.local else args.base_url
+    ).rstrip("/")
+    logger.info(f"Using SparkProxy base URL: {selected_base_url}")
+    main("dev" if args.dev else "prod", selected_base_url)
