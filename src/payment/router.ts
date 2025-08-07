@@ -1,111 +1,15 @@
-import { z } from 'zod';
 import * as crypto from 'crypto';
-import { Network, SparkWallet, encodeSparkAddress } from '@buildonspark/spark-sdk'
+import { Network, SparkAddressFormat } from '@buildonspark/spark-sdk'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { drizzle } from 'drizzle-orm/libsql';
 import { eq, and, gt } from 'drizzle-orm';
 import { invoicesTable } from '../db/models';
-import { OfferSchema } from './routes/create';
 import { createInvoiceRoute, checkInvoiceRoute } from './routes';
-import { loadWallet } from '../utils';
+import { workerClient } from '../worker/client';
 import { privateKey } from '../keys';
 
 export const app = new OpenAPIHono()
 const db = drizzle(process.env.DB_FILE_NAME!);
-
-/**
- * Transfer all the balance from the sender to the receiver.
- * 
- * @param senderMnemonic The mnemonic of the sender wallet.
- * @param receiverSparkAddress The spark address of the receiver.
- * @param network The network to use.
- */
-async function transferAll(senderWallet: SparkWallet, receiverSparkAddress: string) {
-    const balance = await senderWallet.getBalance()
-    if (balance.balance > 0) {
-        console.log(`Transferring ${balance.balance} sats to ${receiverSparkAddress}`)
-        let info = await senderWallet.transfer({
-            amountSats: Number(balance.balance),
-            receiverSparkAddress: receiverSparkAddress,
-        })
-        console.log(info)
-    }
-    balance.tokenBalances.forEach(async (tokenBalance) => {
-        console.log(`Transferring ${tokenBalance.balance} ${tokenBalance.tokenMetadata.tokenName} tokens to ${receiverSparkAddress}`)
-        await senderWallet.transferTokens({
-            tokenPublicKey: tokenBalance.tokenMetadata.tokenPublicKey,
-            tokenAmount: tokenBalance.balance,
-            receiverSparkAddress: receiverSparkAddress,
-        })
-    })
-    await senderWallet.cleanupConnections()
-}
-
-/**
- * Checks if the offers are met.
- * 
- * @param mnemonic The mnemonic of the wallet to check.
- * @param network The network to use.
- * @param offers The offers to check.
- */
-async function isOfferMet(wallet: SparkWallet, network: keyof typeof Network, offers: z.infer<typeof OfferSchema>[]) {
-    const balance = await wallet.getBalance()
-    for (const offer of offers) {
-        if (offer.asset === "BITCOIN") {
-            if (balance.balance >= offer.amount) {
-                const result = await wallet.getTransfers(10, 0);
-                if (result.transfers.length > 0) {
-                    for (const transfer of result.transfers) {
-                        if (transfer.transferDirection === 'INCOMING') {
-                            return {
-                                paid: true,
-                                sending_address: encodeSparkAddress({
-                                    identityPublicKey: transfer.senderIdentityPublicKey,
-                                    network: network,
-                                }),
-                            }
-                        }
-                    }
-                }
-                return {
-                    paid: true,
-                    sending_address: null,
-                }
-            }
-        } else if (offer.asset === "TOKEN") {
-            const tokenBalance = Object.values(balance.tokenBalances).find(tokenBalance => tokenBalance.tokenMetadata.tokenPublicKey === offer.token_pubkey)
-            if (tokenBalance && tokenBalance.balance >= offer.amount) {
-                // TODO: Check natively using the SDK once it's added. For now, we'll use the SparkScan API.
-                const result = await fetch(`https://api.sparkscan.io/v1/address/${await wallet.getSparkAddress()}/transactions?network=${network}&limit=25&offset=0`, {
-                    headers: {
-                        'accept': 'application/json'
-                    }
-                });
-                const transactions = (await result.json()).data;
-                if (transactions.length > 0) {
-                    for (const tx of transactions) {
-                        if (tx.type === 'token_transfer' &&
-                            tx.direction === 'incoming' &&
-                            tx.tokenMetadata?.pubkey === offer.token_pubkey) {
-                            return {
-                                paid: true,
-                                sending_address: tx.counterparty?.identifier
-                            }
-                        }
-                    }
-                }
-                return {
-                    paid: true,
-                    sending_address: null,
-                }
-            }
-        }
-    }
-    return {
-        paid: false,
-        sending_address: null,
-    }
-}
 
 /**
  * Send a signed webhook to the webhook URL.
@@ -132,12 +36,10 @@ async function sendWebhook(webhookURL: string, payload: string) {
 }
 
 app.openapi(createInvoiceRoute, async (c) => {
-    const { mnemonic, wallet } = await SparkWallet.initialize({
-        options: {
-            network: c.req.valid('json').network as keyof typeof Network,
-        },
+    const { mnemonic, address: sparkAddress } = await workerClient.initialize({
+        network: c.req.valid('json').network as keyof typeof Network,
+        environment: 'prod',
     })
-    const sparkAddress = await wallet.getSparkAddress()
 
     // Check that the assets are unique.
     const uniqueAssets = new Set(c.req.valid('json').offers.map(offer => offer.asset))
@@ -149,10 +51,13 @@ app.openapi(createInvoiceRoute, async (c) => {
     let invoice = "";
     for (const offer of c.req.valid('json').offers) {
         if (offer.asset === "BITCOIN") {
-            const { invoice: lightningInvoice } = await wallet.createLightningInvoice({
+            const { invoice: encoded } = await workerClient.createLightningInvoice({
+                mnemonic: mnemonic!,
+                network: c.req.valid('json').network as keyof typeof Network,
+                environment: 'prod',
                 amountSats: offer.amount,
             })
-            invoice = lightningInvoice.encodedInvoice
+            invoice = encoded
             break;
         }
     }
@@ -169,7 +74,6 @@ app.openapi(createInvoiceRoute, async (c) => {
         paid: false,
     }).returning({ id: invoicesTable.id });
 
-    await wallet.cleanupConnections()
     return c.json({
         invoice_id: result[0].id,
         spark_address: sparkAddress,
@@ -207,11 +111,20 @@ async function scanInvoices() {
         }
 
         // If there are transactions, we'll check if the offer condition have been met.
-        const wallet = await loadWallet({ mnemonic: invoice.mnemonic, network: invoice.network as keyof typeof Network, environment: 'prod' })
-        const offerStatus = await isOfferMet(wallet, invoice.network as keyof typeof Network, JSON.parse(invoice.offers_json))
+        const offerStatus = await workerClient.isOfferMet({
+            mnemonic: invoice.mnemonic,
+            network: invoice.network as keyof typeof Network,
+            environment: 'prod',
+            offers: JSON.parse(invoice.offers_json),
+        })
         if (offerStatus.paid) {
             await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
-            await transferAll(wallet, invoice.sweep_address)
+            await workerClient.transferAll({
+                mnemonic: invoice.mnemonic,
+                network: invoice.network as keyof typeof Network,
+                environment: 'prod',
+                receiverSparkAddress: invoice.sweep_address as SparkAddressFormat,
+            })
             if (invoice.webhook_url) {
                 await sendWebhook(invoice.webhook_url, JSON.stringify({
                     invoice_id: invoice.id,

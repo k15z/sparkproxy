@@ -3,9 +3,9 @@ import { z } from "@hono/zod-openapi"
 import { SparkHeadersSchema } from "../schema"
 
 export const TokenTransferSchema = z.object({
-    tokenPublicKey: z.string(),
     tokenAmount: z.number(),
-    receiverSparkAddress: z.string(),
+    tokenIdentifier: z.string(),
+    receiverSparkAddress: z.string(), // TODO: Validate this and make it a SparkAddressFormat
 })
 
 export const TokenTransferOutputSchema = z.object({
