@@ -3,26 +3,12 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0,15,30,45 * * * *'
-  pull_request:
-    paths:
-      - '.github/workflows/synthetic.yml'
-      - 'examples/synthetic.py'
 
 jobs:
   transfer:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: Install Heroku CLI
-        run: |
-          curl https://cli-assets.heroku.com/install.sh | sh
-  
-      - name: Restart Heroku dynos
-        env:
-          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-        run: |
-          heroku ps:restart --app sparkproxy
 
       - name: Set up Python
         uses: actions/setup-python@v4

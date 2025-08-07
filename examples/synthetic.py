@@ -141,8 +141,8 @@ def check_blink_lightning(environment, amount_sats: int, base_url: str):
         )
 
     # Wait for Blink to pay the Spark invoice
-    logger.info("Waiting 20 seconds for Blink to pay the Spark invoice")
-    time.sleep(20)
+    logger.info("Waiting 3 seconds for Blink to pay the Spark invoice")
+    time.sleep(3)
 
     # Create Blink invoice
     logger.info("Creating Blink lightning invoice")
@@ -228,8 +228,8 @@ def check_spark_transfer(environment, base_url: str):
         raise e
 
     # Wait between transfers
-    logger.info("Waiting 20 seconds between transfers")
-    time.sleep(20)
+    logger.info("Waiting 3 seconds between transfers")
+    time.sleep(3)
 
     # Second transfer
     try:
@@ -246,7 +246,6 @@ def check_spark_transfer(environment, base_url: str):
 
     # Wait between transfers
     logger.info("Successfully completed Spark transfer test")
-    time.sleep(20)
     return True
 
 
