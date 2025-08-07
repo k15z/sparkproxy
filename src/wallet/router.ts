@@ -1,144 +1,92 @@
-import { SparkWallet } from '@buildonspark/spark-sdk'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute } from './routes'
-import { loadWallet, unknownErrorToJson, devSparkConfig, trackExecutionTime } from '../utils'
+import { unknownErrorToJson } from '../utils'
+import { workerClient } from '../worker/client'
+import { Bech32mTokenIdentifier, SparkAddressFormat } from '@buildonspark/spark-sdk'
 
 export const app = new OpenAPIHono()
 
 app.openapi(initializeRoute, async (c) => {
     const { 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const { mnemonic: walletMnemonic, wallet } = await SparkWallet.initialize({
-        options: {
-            network: network,
-            ...(environment === 'dev' ? devSparkConfig : {}),
-        },
-    })
-    const address = await wallet.getSparkAddress();
-    await wallet.cleanupConnections();
+    const { mnemonic, address } = await workerClient.initialize({ network, environment })
     return c.json({
-        mnemonic: walletMnemonic!,
+        mnemonic: mnemonic,
         address: address,
     }, 200)
 })
 
 app.openapi(balanceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const { balance, tokenBalances } = await trackExecutionTime("getBalance", () => wallet.getBalance())
-        return c.json(
-            {
-                address: await wallet.getSparkAddress(),
-                balance: Number(balance),
-                tokenBalances: Array.from(tokenBalances.entries()).map(([tokenIdentifier, tokenBalance]) => {
-                    return {
-                        balance: Number(tokenBalance.balance),
-                        tokenInfo: {
-                            tokenIdentifier: tokenIdentifier,
-                            tokenPublicKey: tokenBalance.tokenMetadata.tokenPublicKey,
-                            tokenName: tokenBalance.tokenMetadata.tokenName,
-                            tokenSymbol: tokenBalance.tokenMetadata.tokenTicker,
-                            tokenDecimals: tokenBalance.tokenMetadata.decimals,
-                            maxSupply: Number(tokenBalance.tokenMetadata.maxSupply),
-                        },
-                    }
-                }),
-            },
-            200
-        )
+        const result = await workerClient.balance({ mnemonic, network, environment })
+        return c.json(result, 200)
     } catch (err: unknown) {
-        return c.json({
-            error: unknownErrorToJson(err),
-        }, 400)
-    } finally {
-        await wallet.cleanupConnections();
+        return c.json({ error: unknownErrorToJson(err) }, 400)
     }
 })
 
 app.openapi(transferRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const { id } = await trackExecutionTime("transfer", () => wallet.transfer({
+        const { id } = await workerClient.transfer({
+            mnemonic,
+            network,
+            environment,
             amountSats: c.req.valid('json').amountSats,
-            receiverSparkAddress: c.req.valid('json').receiverSparkAddress,
-        }))
-        return c.json(
-            {
-                id: id,
-            },
-            200
-        )
+            receiverSparkAddress: c.req.valid('json').receiverSparkAddress as SparkAddressFormat,
+        })
+        return c.json({ id }, 200)
     } catch (err: unknown) {
-        return c.json({
-            error: unknownErrorToJson(err),
-        }, 400)
-    } finally {
-        await wallet.cleanupConnections();
+        return c.json({ error: unknownErrorToJson(err) }, 400)
     }
 })
 
 app.openapi(tokenTransferRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const id = await trackExecutionTime("transferTokens", () => wallet.transferTokens({
-            tokenPublicKey: c.req.valid('json').tokenPublicKey,
-            tokenAmount: BigInt(c.req.valid('json').tokenAmount),
-            receiverSparkAddress: c.req.valid('json').receiverSparkAddress,
-        }))
-        return c.json(
-            {
-                id: id,
-            },
-            200
-        )
+        const { id } = await workerClient.transferTokens({
+            mnemonic,
+            network,
+            environment,
+            tokenIdentifier: c.req.valid('json').tokenIdentifier as Bech32mTokenIdentifier,
+            tokenAmount: String(c.req.valid('json').tokenAmount),
+            receiverSparkAddress: c.req.valid('json').receiverSparkAddress as SparkAddressFormat,
+        })
+        return c.json({ id }, 200)
     } catch (err: unknown) {
-        return c.json({
-            error: unknownErrorToJson(err),
-        }, 400)
-    } finally {
-        await wallet.cleanupConnections();
+        return c.json({ error: unknownErrorToJson(err) }, 400)
     }
 })
 
 app.openapi(payLightningInvoiceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment }))
     try {
-        const { id } = await trackExecutionTime("payLightningInvoice", () => wallet.payLightningInvoice({
+        const { id } = await workerClient.payLightningInvoice({
+            mnemonic,
+            network,
+            environment,
             invoice: c.req.valid('json').invoice,
             maxFeeSats: c.req.valid('json').maxFeeSats,
-        }))
-        return c.json({
-            id: id,
-        }, 200)
+        })
+        return c.json({ id }, 200)
     } catch (err: unknown) {
-        return c.json({
-            error: unknownErrorToJson(err),
-        }, 400)
-    } finally {
-        await wallet.cleanupConnections();
+        return c.json({ error: unknownErrorToJson(err) }, 400)
     }
 })
 
 app.openapi(createLightningInvoiceRoute, async (c) => {
     const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
-    const wallet = await trackExecutionTime("loadWallet", () => loadWallet({ mnemonic, network, environment, waitForSync: false }))
     try {
-        const { invoice } = await trackExecutionTime("createLightningInvoice", () => wallet.createLightningInvoice({
+        const { invoice } = await workerClient.createLightningInvoice({
+            mnemonic,
+            network,
+            environment,
             amountSats: c.req.valid('json').amount,
             memo: c.req.valid('json').memo,
             expirySeconds: c.req.valid('json').expirySeconds,
-        }))
-        return c.json({
-            invoice: invoice.encodedInvoice,
-        }, 200)
+        })
+        return c.json({ invoice }, 200)
     } catch (err: unknown) {
-        return c.json({
-            error: unknownErrorToJson(err),
-        }, 400)
-    } finally {
-        await wallet.cleanupConnections();
+        return c.json({ error: unknownErrorToJson(err) }, 400)
     }
 })
