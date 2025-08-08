@@ -246,7 +246,8 @@ async function handleTransferAll(id: string, payload: TransferAllPayload): Promi
         receiverSparkAddress: payload.receiverSparkAddress,
       }), timings);
     }
-    for (const [tokenIdentifier, tokenBalance] of Object.entries(balance.tokenBalances)) {
+    const tokenEntries = Array.from(balance.tokenBalances.entries());
+    for (const [tokenIdentifier, tokenBalance] of tokenEntries) {
       await measure(
         "transferTokens",
         () => wallet!.transferTokens({
