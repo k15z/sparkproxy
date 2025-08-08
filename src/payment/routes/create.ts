@@ -41,7 +41,7 @@ export const createInvoiceRoute = createRoute({
                     schema: CreateOutputSchema,
                 },
             },
-            description: 'Initialize a new wallet',
+            description: 'Create a new multi-asset invoice',
         },
         400: {
             content: {

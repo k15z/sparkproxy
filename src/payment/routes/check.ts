@@ -22,7 +22,7 @@ export const checkInvoiceRoute = createRoute({
                     schema: CheckInvoiceSchema,
                 },
             },
-            description: 'Initialize a new wallet',
+            description: 'Check the status of an invoice',
         },
         404: {
             content: {
