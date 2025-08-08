@@ -41,10 +41,15 @@ app.openapi(createInvoiceRoute, async (c) => {
         environment: 'prod',
     })
 
-    // Check that the assets are unique.
-    const uniqueAssets = new Set(c.req.valid('json').offers.map(offer => offer.asset))
-    if (uniqueAssets.size !== c.req.valid('json').offers.length) {
-        return c.json({ error: 'Assets must be unique' }, 400)
+    // Check that the asset/tokenIdentifier combinations are unique.
+    const offers = c.req.valid('json').offers
+    const seenKeys = new Set<string>()
+    for (const offer of offers as Array<{ asset: string; amount: number; tokenIdentifier?: string }>) {
+        const key = offer.asset === 'TOKEN' ? `TOKEN:${offer.tokenIdentifier ?? ''}` : 'BITCOIN'
+        if (seenKeys.has(key)) {
+            return c.json({ error: 'Duplicate asset/tokenIdentifier detected' }, 400)
+        }
+        seenKeys.add(key)
     }
 
     // Generate a Lightning invoice if there is a Bitcoin offer.
@@ -98,42 +103,62 @@ app.openapi(checkInvoiceRoute, async (c) => {
  * Scan the unpaid invoices in the database to see if they have been paid.
  */
 async function scanInvoices() {
-    const invoices = await db.select().from(invoicesTable).where(and(eq(invoicesTable.paid, false), gt(invoicesTable.expires_at, new Date())))
-    for (const invoice of invoices) {
-        console.log(`Checking invoice ${invoice.id}`)
+    try {
+        const invoices = await db.select().from(invoicesTable).where(and(eq(invoicesTable.paid, false), gt(invoicesTable.expires_at, new Date())))
+        for (const invoice of invoices) {
+            try {
+                console.log(`Checking invoice ${invoice.id}`)
 
-        // First, we'll check the SparkScan API to see if there are any transactions since it's much faster than initializing the wallet.
-        const result = await fetch(`https://api.sparkscan.io/v1/address/${invoice.spark_address}?network=${invoice.network}`)
-        const data = await result.json()
-        if (data['transactionCount'] == 0) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-            continue // No transactions yet.
-        }
+                // First, check SparkScan for quick signal; handle non-OK and network errors gracefully.
+                const resp = await fetch(`https://api.sparkscan.io/v1/address/${invoice.spark_address}?network=${invoice.network}`)
+                if (!resp.ok) {
+                    console.warn(`SparkScan request failed for ${invoice.id}: ${resp.status}`)
+                    // back off briefly to avoid hammering in case of rate limit
+                    await new Promise(resolve => setTimeout(resolve, 200))
+                    continue
+                }
+                let data: any = null
+                try {
+                    data = await resp.json()
+                } catch (e) {
+                    console.warn(`Failed to parse SparkScan response for ${invoice.id}`)
+                    continue
+                }
+                if (!data || (typeof data['transactionCount'] === 'number' && data['transactionCount'] === 0)) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                    continue // No transactions yet.
+                }
 
-        // If there are transactions, we'll check if the offer condition have been met.
-        const offerStatus = await workerClient.isOfferMet({
-            mnemonic: invoice.mnemonic,
-            network: invoice.network as keyof typeof Network,
-            environment: 'prod',
-            offers: JSON.parse(invoice.offers_json),
-        })
-        if (offerStatus.paid) {
-            await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
-            await workerClient.transferAll({
-                mnemonic: invoice.mnemonic,
-                network: invoice.network as keyof typeof Network,
-                environment: 'prod',
-                receiverSparkAddress: invoice.sweep_address as SparkAddressFormat,
-            })
-            if (invoice.webhook_url) {
-                await sendWebhook(invoice.webhook_url, JSON.stringify({
-                    invoice_id: invoice.id,
-                    paid: true,
-                }))
+                // If there are transactions, check whether offer conditions have been met.
+                const offerStatus = await workerClient.isOfferMet({
+                    mnemonic: invoice.mnemonic,
+                    network: invoice.network as keyof typeof Network,
+                    environment: 'prod',
+                    offers: JSON.parse(invoice.offers_json),
+                })
+                if (offerStatus.paid) {
+                    await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
+                    await workerClient.transferAll({
+                        mnemonic: invoice.mnemonic,
+                        network: invoice.network as keyof typeof Network,
+                        environment: 'prod',
+                        receiverSparkAddress: invoice.sweep_address as SparkAddressFormat,
+                    })
+                    if (invoice.webhook_url) {
+                        await sendWebhook(invoice.webhook_url, JSON.stringify({
+                            invoice_id: invoice.id,
+                            paid: true,
+                        }))
+                    }
+                }
+            } catch (err) {
+                console.warn(`Error while scanning invoice ${invoice.id}:`, err)
+                // continue scanning other invoices
             }
         }
+    } finally {
+        setTimeout(scanInvoices, 5000)
     }
-    setTimeout(scanInvoices, 5000)
 }
 
 scanInvoices()
