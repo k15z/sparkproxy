@@ -28,4 +28,5 @@ jobs:
           ADDRESS2: ${{ secrets.ADDRESS2 }}
           BLINK_API_KEY: ${{ secrets.BLINK_API_KEY }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          TOKEN_IDENTIFIER: ${{ secrets.TOKEN_IDENTIFIER }}
         run: python examples/synthetic.py
