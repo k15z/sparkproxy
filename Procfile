@@ -1,1 +1,1 @@
-web: bun drizzle-kit push && bun start
+web: bun start

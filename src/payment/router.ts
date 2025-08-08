@@ -1,15 +1,13 @@
 import * as crypto from 'crypto';
 import { Network, SparkAddressFormat } from '@buildonspark/spark-sdk'
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/libsql';
-import { eq, and, gt } from 'drizzle-orm';
-import { invoicesTable } from '../db/models';
+import { getInvoiceStore } from '../db/store';
 import { createInvoiceRoute, checkInvoiceRoute } from './routes';
 import { workerClient } from '../worker/client';
 import { privateKey } from '../keys';
 
 export const app = new OpenAPIHono()
-const db = drizzle(process.env.DB_FILE_NAME!);
+const invoices = getInvoiceStore();
 
 /**
  * Send a signed webhook to the webhook URL.
@@ -67,35 +65,33 @@ app.openapi(createInvoiceRoute, async (c) => {
         }
     }
 
-    const result = await db.insert(invoicesTable).values({
+    const { id } = await invoices.create({
         network: c.req.valid('json').network,
         mnemonic: mnemonic!,
-        expires_at: new Date(Date.now() + 1000 * 60 * 60),
+        expires_at: Date.now() + 1000 * 60 * 60,
         offers_json: JSON.stringify(c.req.valid('json').offers),
         webhook_url: c.req.valid('json').webhook_url,
         sweep_address: c.req.valid('json').spark_address,
         spark_address: sparkAddress,
         lightning_invoice: invoice,
-        paid: false,
-    }).returning({ id: invoicesTable.id });
+    })
 
     return c.json({
-        invoice_id: result[0].id,
+        invoice_id: id,
         spark_address: sparkAddress,
         lightning_invoice: invoice,
     }, 200)
 })
 
 app.openapi(checkInvoiceRoute, async (c) => {
-    const invoice = await db.select().from(invoicesTable).where(eq(invoicesTable.id, c.req.valid('param').invoice_id)).limit(1)
-    if (invoice.length === 0) {
+    const invoice = await invoices.getById(c.req.valid('param').invoice_id)
+    if (!invoice) {
         return c.json({ error: 'Invoice not found' }, 404)
     }
-    const result = invoice[0]
     return c.json({
-        invoice_id: result.id,
-        paid: result.paid,
-        sending_address: result.sending_address,
+        invoice_id: invoice.id,
+        paid: invoice.paid,
+        sending_address: invoice.sending_address,
     }, 200)
 })
 
@@ -104,17 +100,20 @@ app.openapi(checkInvoiceRoute, async (c) => {
  */
 async function scanInvoices() {
     try {
-        const invoices = await db.select().from(invoicesTable).where(and(eq(invoicesTable.paid, false), gt(invoicesTable.expires_at, new Date())))
-        for (const invoice of invoices) {
+        const pending = await invoices.listUnpaidAndUnexpired(Date.now())
+        for (const invoice of pending) {
             try {
                 console.log(`Checking invoice ${invoice.id}`)
 
                 // First, check SparkScan for quick signal; handle non-OK and network errors gracefully.
-                const resp = await fetch(`https://api.sparkscan.io/v1/address/${invoice.spark_address}?network=${invoice.network}`)
+                const resp = await fetch(`https://api.sparkscan.io/v1/address/${invoice.spark_address}?network=${invoice.network}`, {
+                    headers: {
+                        'Authorization': `Bearer ${process.env.SPARKSCAN_API_KEY}`
+                    }
+                })
                 if (!resp.ok) {
                     console.warn(`SparkScan request failed for ${invoice.id}: ${resp.status}`)
-                    // back off briefly to avoid hammering in case of rate limit
-                    await new Promise(resolve => setTimeout(resolve, 200))
+                    await new Promise(resolve => setTimeout(resolve, 1000))
                     continue
                 }
                 let data: any = null
@@ -125,7 +124,7 @@ async function scanInvoices() {
                     continue
                 }
                 if (!data || (typeof data['transactionCount'] === 'number' && data['transactionCount'] === 0)) {
-                    await new Promise(resolve => setTimeout(resolve, 100))
+                    await new Promise(resolve => setTimeout(resolve, 1000))
                     continue // No transactions yet.
                 }
 
@@ -137,7 +136,7 @@ async function scanInvoices() {
                     offers: JSON.parse(invoice.offers_json),
                 })
                 if (offerStatus.paid) {
-                    await db.update(invoicesTable).set({ paid: true, sending_address: offerStatus.sending_address || null }).where(eq(invoicesTable.id, invoice.id))
+                    await invoices.markPaid(invoice.id, offerStatus.sending_address || null)
                     await workerClient.transferAll({
                         mnemonic: invoice.mnemonic,
                         network: invoice.network as keyof typeof Network,
