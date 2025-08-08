@@ -13,7 +13,7 @@ merchant-type application such as [Inference Grid](https://inferencegrid.ai/).
 > 🚨 **WARNING:** The public endpoint at https://sparkproxy.kevz.dev is meant for testing. For actual 
 > applications, you should run your own instance. 🚨
 
-Built with Hono and Drizzle ORM.
+Built with Hono. Invoices are stored in Redis when `REDIS_URL` is set, otherwise an in-memory store is used (non-persistent; for local/dev only).
 
 ## Development
 
@@ -30,11 +30,7 @@ To install dependencies:
 bun install
 ```
 
-To set up the database:
-
-```sh
-bun run drizzle-kit push
-```
+Optional: set up Redis by providing `REDIS_URL` (e.g. `redis://localhost:6379`). Without it, the service uses an in-memory store.
 
 To run:
 
