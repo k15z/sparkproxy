@@ -1,3 +1,11 @@
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "requests>=2.31",
+#   "python-dotenv>=1.0.0",
+# ]
+# ///
 import sys
 import os
 import time
@@ -6,8 +14,11 @@ import logging
 import argparse
 from random import randint
 from typing import Literal
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 
 class SyntheticTestError(Exception):
@@ -69,6 +80,31 @@ def make_transfer(environment, mnemonic, receiver_address, amount_sats, base_url
             operation="transfer",
             details=response.text,
             original_error=Exception(f"Spark transfer failed: {response.text}"),
+        )
+    return response.ok and "error" not in response.text
+
+
+def make_token_transfer(
+    environment, mnemonic, token_identifier, receiver_address, amount_tokens, base_url
+):
+    response = requests.post(
+        f"{base_url}/wallet/token-transfer",
+        headers={
+            "accept": "application/json",
+            "spark-network": "MAINNET",
+            "spark-environment": environment,
+            "spark-mnemonic": mnemonic,
+            "Content-Type": "application/json",
+        },
+        json={"tokenAmount": amount_tokens, "tokenIdentifier": token_identifier, "receiverSparkAddress": receiver_address},
+    )
+    logger.info(f"Spark token transfer response: {response.text}")
+    if "error" in response.text:
+        raise SyntheticTestError(
+            test_name="Spark",
+            operation="token_transfer",
+            details=response.text,
+            original_error=Exception(f"Spark token transfer failed: {response.text}"),
         )
     return response.ok and "error" not in response.text
 
@@ -216,7 +252,9 @@ def check_spark_transfer(environment, base_url: str):
 
     # First transfer
     try:
-        logger.info(f"Making transfer from {os.environ['ADDRESS1']} to {os.environ['ADDRESS2']} for {amount_sats} sats")
+        logger.info(
+            f"Making transfer from {os.environ['ADDRESS1']} to {os.environ['ADDRESS2']} for {amount_sats} sats"
+        )
         make_transfer(
             environment,
             os.environ["MNEMONIC1"],
@@ -233,7 +271,9 @@ def check_spark_transfer(environment, base_url: str):
 
     # Second transfer
     try:
-        logger.info(f"Making transfer from {os.environ['ADDRESS2']} to {os.environ['ADDRESS1']} for {amount_sats} sats")
+        logger.info(
+            f"Making transfer from {os.environ['ADDRESS2']} to {os.environ['ADDRESS1']} for {amount_sats} sats"
+        )
         make_transfer(
             environment,
             os.environ["MNEMONIC2"],
@@ -249,6 +289,54 @@ def check_spark_transfer(environment, base_url: str):
     return True
 
 
+def check_spark_token_transfer(environment, base_url: str):
+    """Check Spark token transfer between two addresses"""
+    amount_tokens = randint(50, 200)
+    logger.info(
+        f"Starting token transfer test between two Spark wallets for {amount_tokens} tokens"
+    )
+
+    # First transfer
+    try:
+        logger.info(
+            f"Making transfer from {os.environ['ADDRESS1']} to {os.environ['ADDRESS2']} for {amount_tokens} tokens"
+        )
+        make_token_transfer(
+            environment,
+            os.environ["MNEMONIC1"],
+            os.environ["TOKEN_IDENTIFIER"],
+            os.environ["ADDRESS2"],
+            amount_tokens,
+            base_url,
+        )
+    except SyntheticTestError as e:
+        raise e
+
+    # Wait between transfers
+    logger.info("Waiting 3 seconds between transfers")
+    time.sleep(3)
+
+    # Second transfer
+    try:
+        logger.info(
+            f"Making transfer from {os.environ['ADDRESS2']} to {os.environ['ADDRESS1']} for {amount_tokens} tokens"
+        )
+        make_token_transfer(
+            environment,
+            os.environ["MNEMONIC2"],
+            os.environ["TOKEN_IDENTIFIER"],
+            os.environ["ADDRESS1"],
+            amount_tokens,
+            base_url,
+        )
+    except SyntheticTestError as e:
+        raise e
+
+    # Wait between transfers
+    logger.info("Successfully completed Spark token transfer test")
+    return True
+
+
 def main(environment: Literal["dev", "prod"], base_url: str):
     errors = []
 
@@ -260,6 +348,12 @@ def main(environment: Literal["dev", "prod"], base_url: str):
         check_blink_lightning(environment, randint(10, 20), base_url)
     except SyntheticTestError as e:
         errors.append(e)
+
+    if environment != "dev":
+        try:
+            check_spark_token_transfer(environment, base_url)
+        except SyntheticTestError as e:
+            errors.append(e)
 
     # Send detailed notification if any tests failed
     if errors:
