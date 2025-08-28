@@ -1,0 +1,32 @@
+name: Synthetic Tests
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0,15,30,45 * * * *'
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests python-dotenv
+
+      - name: Run synthetic tests (dev)
+        env:
+          MNEMONIC1: ${{ secrets.MNEMONIC1 }}
+          MNEMONIC2: ${{ secrets.MNEMONIC2 }}
+          ADDRESS1: ${{ secrets.ADDRESS1 }}
+          ADDRESS2: ${{ secrets.ADDRESS2 }}
+          BLINK_API_KEY: ${{ secrets.BLINK_API_KEY }}
+          SLACK_WEBHOOK: ${{ secrets.DEV_SLACK_WEBHOOK }}
+          TOKEN_IDENTIFIER: ${{ secrets.TOKEN_IDENTIFIER }}
+        run: python examples/synthetic.py --dev
