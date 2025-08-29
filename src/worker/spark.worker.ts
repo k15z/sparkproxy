@@ -1,4 +1,5 @@
-import { Bech32mTokenIdentifier, Network, SparkWallet, encodeSparkAddress } from "@buildonspark/spark-sdk";
+import { Bech32mTokenIdentifier, Network, SparkWallet, encodeSparkAddress, SparkSdkLogger } from "@buildonspark/spark-sdk";
+import { LoggingLevel } from "@lightsparkdev/core";
 import {
   BalancePayload,
   BalanceResult,
@@ -34,6 +35,9 @@ async function measure<T>(name: string, fn: () => Promise<T>, timings: Timings):
 }
 
 async function loadWalletWithOptions(mnemonic: string, network: keyof typeof Network, environment: "dev" | "prod", timings: Timings) {
+  SparkSdkLogger.setAllEnabled(true);
+  SparkSdkLogger.setAllLevels(LoggingLevel.Trace);
+
   const { wallet } = await measure("loadWallet", async () =>
     SparkWallet.initialize({
       mnemonicOrSeed: mnemonic,
