@@ -1,8 +1,8 @@
-name: Synthetic Tests
+name: Synthetic Tests (dev)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0,15,30,45 * * * *'
+    - cron: '15,30,45 * * * *'
 
 jobs:
   transfer:
