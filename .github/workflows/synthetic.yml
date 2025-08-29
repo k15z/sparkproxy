@@ -2,7 +2,7 @@ name: Synthetic Tests
 on:
   workflow_dispatch:
   schedule:
-    - cron: '15,30,45 * * * *'
+    - cron: '10,30,50 * * * *'
 
 jobs:
   transfer:
