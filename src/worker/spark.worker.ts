@@ -77,6 +77,7 @@ async function handleInitialize(id: string, payload: InitializePayload): Promise
     await measure("cleanupConnections", () => wallet.cleanupConnections(), timings);
     return ok(id, { mnemonic: mnemonic!, address }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   }
 }
@@ -105,6 +106,7 @@ async function handleBalance(id: string, payload: BalancePayload): Promise<Worke
     };
     return ok(id, result, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   } finally {
     if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
@@ -122,6 +124,7 @@ async function handleTransfer(id: string, payload: TransferPayload): Promise<Wor
     }), timings);
     return ok(id, { id: txid }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   } finally {
     if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
@@ -144,6 +147,7 @@ async function handleTransferTokens(id: string, payload: TransferTokensPayload):
     );
     return ok(id, { id: String(txid) }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   } finally {
     if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
@@ -161,6 +165,7 @@ async function handlePayLightningInvoice(id: string, payload: PayLightningInvoic
     }), timings);
     return ok(id, { id: txid }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   } finally {
     if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
@@ -183,6 +188,7 @@ async function handleCreateLightningInvoice(id: string, payload: CreateLightning
     await measure("cleanupConnections", () => wallet.cleanupConnections(), timings);
     return ok(id, { invoice: invoice.encodedInvoice }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   }
 }
@@ -232,6 +238,7 @@ async function handleIsOfferMet(id: string, payload: IsOfferMetPayload): Promise
     }
     return ok(id, { paid: false, sending_address: null }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   } finally {
     if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
@@ -264,6 +271,7 @@ async function handleTransferAll(id: string, payload: TransferAllPayload): Promi
     }
     return ok(id, { ok: true }, timings);
   } catch (e) {
+    console.error(e);
     return err(id, e, timings);
   } finally {
     if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
