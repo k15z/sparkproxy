@@ -1,11 +1,11 @@
-name: Synthetic Tests
+name: Reset Heroku
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 * * * *'
 
 jobs:
-  transfer:
+  reset:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
