@@ -39,3 +39,10 @@ bun run dev
 ```
 
 open http://localhost:3000 and check out the docs at http://localhost:3000/docs
+
+## Docker
+
+```
+docker build -t sparkproxy .
+docker run -p 3000:3000 --env-file .env sparkproxy
+```
