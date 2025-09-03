@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute } from './routes'
+import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute, batchInitializeRoute } from './routes'
 import { unknownErrorToJson } from '../utils'
 import { workerClient } from '../worker/client'
 import { Bech32mTokenIdentifier, SparkAddressFormat } from '@buildonspark/spark-sdk'
@@ -13,6 +13,20 @@ app.openapi(initializeRoute, async (c) => {
         mnemonic: mnemonic,
         address: address,
     }, 200)
+})
+
+// Warning: This crashes on MacOS for a large number of wallets.
+app.openapi(batchInitializeRoute, async (c) => {
+    const { 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
+    const count = c.req.valid('query').count
+    const wallets = await Promise.all(Array.from({ length: count ?? 1 }, async () => {
+        const { mnemonic, address } = await workerClient.initialize({ network, environment })
+        return {
+            mnemonic: mnemonic,
+            address: address,
+        }
+    }))
+    return c.json(wallets, 200)
 })
 
 app.openapi(balanceRoute, async (c) => {

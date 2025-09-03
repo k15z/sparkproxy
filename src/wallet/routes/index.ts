@@ -1,4 +1,4 @@
-export { initializeRoute } from './initialize'
+export { initializeRoute, batchInitializeRoute } from './initialize'
 export { balanceRoute } from './balance'
 export { transferRoute } from './transfer'
 export { tokenTransferRoute } from './transfer_token'

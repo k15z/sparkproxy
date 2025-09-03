@@ -25,3 +25,25 @@ export const initializeRoute = createRoute({
     },
     tags: ["Wallet"],
 })
+
+export const batchInitializeRoute = createRoute({
+    method: 'get',
+    path: '/batch-initialize',
+    request: {
+        headers: SparkNetworkSchema,
+        query: z.object({
+            count: z.coerce.number().min(0).max(100),
+        }),
+    },
+    responses: {
+        200: {
+            content: {
+                'application/json': {
+                    schema: z.array(WalletInfoSchema),
+                },
+            },
+            description: 'Initialize a batch of wallets',
+        },
+    },
+    tags: ["Wallet"],
+})
