@@ -2,7 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute, batchInitializeRoute } from './routes'
 import { unknownErrorToJson } from '../utils'
 import { workerClient } from '../worker/client'
-import { Bech32mTokenIdentifier, SparkAddressFormat } from '@buildonspark/spark-sdk'
+import type { Bech32mTokenIdentifier, SparkAddressFormat } from '@buildonspark/spark-sdk'
 
 export const app = new OpenAPIHono()
 
