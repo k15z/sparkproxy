@@ -1,6 +1,6 @@
 import { createRoute } from "@hono/zod-openapi"
 import { z } from "@hono/zod-openapi"
-import { SparkHeadersSchema } from "../schema"
+import { SparkHeadersSchema } from "../schema.js"
 
 export const TransferSchema = z.object({
     amountSats: z.number(),
@@ -46,3 +46,5 @@ export const transferRoute = createRoute({
     },
     tags: ["Wallet"],
 })
+
+

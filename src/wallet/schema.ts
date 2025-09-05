@@ -16,3 +16,5 @@ export const SparkMnemonicSchema = z.object({
 })
 
 export const SparkHeadersSchema = SparkNetworkSchema.merge(SparkMnemonicSchema)
+
+

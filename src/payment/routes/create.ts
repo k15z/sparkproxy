@@ -3,7 +3,6 @@ import { createRoute, z } from "@hono/zod-openapi"
 export const OfferSchema = z.object({
     asset: z.enum(["BITCOIN", "TOKEN"]).default("BITCOIN"),
     amount: z.number().default(1000),
-    // Align with worker expectation: tokenIdentifier for TOKEN offers
     tokenIdentifier: z.string().optional().default('').describe('If asset is TOKEN, the Bech32m token identifier.'),
 })
 
@@ -56,3 +55,5 @@ export const createInvoiceRoute = createRoute({
     },
     tags: ["Payment"],
 })
+
+

@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi'
-import { SparkHeadersSchema, SparkNetworkSchema } from '../schema'
+import { SparkHeadersSchema, SparkNetworkSchema } from '../schema.js'
 import { createRoute } from '@hono/zod-openapi'
 
 export const WalletInfoSchema = z.object({
@@ -47,3 +47,5 @@ export const batchInitializeRoute = createRoute({
     },
     tags: ["Wallet"],
 })
+
+

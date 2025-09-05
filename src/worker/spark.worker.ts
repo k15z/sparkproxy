@@ -1,6 +1,8 @@
-import { Bech32mTokenIdentifier, Network, SparkWallet, encodeSparkAddress, SparkSdkLogger } from "@buildonspark/spark-sdk";
+import { parentPort } from 'node:worker_threads';
+import { performance } from 'node:perf_hooks'
+import { type Bech32mTokenIdentifier, Network, SparkWallet, encodeSparkAddress, SparkSdkLogger } from "@buildonspark/spark-sdk";
 import { LoggingLevel } from "@lightsparkdev/core";
-import {
+import type {
   BalancePayload,
   BalanceResult,
   CreateLightningInvoicePayload,
@@ -19,10 +21,9 @@ import {
   TransferTokensResult,
   WorkerRequest,
   WorkerResponse,
-} from "./types";
+} from "./types.js";
 
-// devSparkConfig is used only in dev environment
-import { devSparkConfig } from "../utils";
+import { devSparkConfig } from "../utils.js";
 
 type Timings = Record<string, number>;
 
@@ -45,7 +46,6 @@ async function loadWalletWithOptions(mnemonic: string, network: keyof typeof Net
     })
   , timings);
 
-  // Wait for sync similar to utils.loadWallet
   await new Promise((resolve) => {
     wallet.on("stream:connected", resolve);
     setTimeout(() => resolve(true), 5000);
@@ -175,7 +175,6 @@ async function handlePayLightningInvoice(id: string, payload: PayLightningInvoic
 async function handleCreateLightningInvoice(id: string, payload: CreateLightningInvoicePayload): Promise<WorkerResponse<CreateLightningInvoiceResult>> {
   const timings: Timings = {};
   try {
-    // For invoice creation we avoid waiting for sync to reduce latency
     const { wallet } = await measure("loadWallet", () => SparkWallet.initialize({
       mnemonicOrSeed: payload.mnemonic,
       options: { network: payload.network as keyof typeof Network, ...(payload.environment === "dev" ? devSparkConfig : {}) },
@@ -221,7 +220,6 @@ async function handleIsOfferMet(id: string, payload: IsOfferMetPayload): Promise
       } else if (offer.asset === "TOKEN") {
         const tokenBalance = balance.tokenBalances.get(offer.tokenIdentifier);
         if (tokenBalance && tokenBalance.balance >= offer.amount) {
-          // Mirror original logic: query SparkScan for recent transactions to find incoming token transfer
           const address = await measure("getSparkAddress", () => wallet!.getSparkAddress(), timings);
           const resp = await measure("sparkscan", () => fetch(`https://api.sparkscan.io/v1/address/${address}/transactions?network=${payload.network}&limit=25&offset=0`, { headers: { accept: "application/json" } }), timings);
           const transactions = (await resp.json()).data;
@@ -278,35 +276,40 @@ async function handleTransferAll(id: string, payload: TransferAllPayload): Promi
   }
 }
 
-// Bun Worker onmessage handler
-onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  const { id, op, payload } = e.data;
+if (!parentPort) {
+  throw new Error('Worker must be run as a worker thread');
+}
+
+parentPort.on('message', async (msg: WorkerRequest) => {
+  const { id, op, payload } = msg;
   switch (op) {
     case "initialize":
-      postMessage(await handleInitialize(id, payload as InitializePayload));
+      parentPort!.postMessage(await handleInitialize(id, payload as InitializePayload));
       break;
     case "balance":
-      postMessage(await handleBalance(id, payload as BalancePayload));
+      parentPort!.postMessage(await handleBalance(id, payload as BalancePayload));
       break;
     case "transfer":
-      postMessage(await handleTransfer(id, payload as TransferPayload));
+      parentPort!.postMessage(await handleTransfer(id, payload as TransferPayload));
       break;
     case "transferTokens":
-      postMessage(await handleTransferTokens(id, payload as TransferTokensPayload));
+      parentPort!.postMessage(await handleTransferTokens(id, payload as TransferTokensPayload));
       break;
     case "payLightningInvoice":
-      postMessage(await handlePayLightningInvoice(id, payload as PayLightningInvoicePayload));
+      parentPort!.postMessage(await handlePayLightningInvoice(id, payload as PayLightningInvoicePayload));
       break;
     case "createLightningInvoice":
-      postMessage(await handleCreateLightningInvoice(id, payload as CreateLightningInvoicePayload));
+      parentPort!.postMessage(await handleCreateLightningInvoice(id, payload as CreateLightningInvoicePayload));
       break;
     case "isOfferMet":
-      postMessage(await handleIsOfferMet(id, payload as IsOfferMetPayload));
+      parentPort!.postMessage(await handleIsOfferMet(id, payload as IsOfferMetPayload));
       break;
     case "transferAll":
-      postMessage(await handleTransferAll(id, payload as TransferAllPayload));
+      parentPort!.postMessage(await handleTransferAll(id, payload as TransferAllPayload));
       break;
     default:
-      postMessage({ id, ok: false, error: { name: "BadRequest", message: `Unknown op: ${String(op)}` } satisfies WorkerResponse["error"] });
+      parentPort!.postMessage({ id, ok: false, error: { name: "BadRequest", message: `Unknown op: ${String(op)}` } as WorkerResponse["error"] });
   }
-};
+});
+
+
