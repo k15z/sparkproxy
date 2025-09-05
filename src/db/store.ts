@@ -1,4 +1,5 @@
-import Redis from 'ioredis'
+import IORedis from 'ioredis'
+import type { Redis as RedisClient } from 'ioredis'
 import * as crypto from 'crypto'
 
 export type InvoiceRecord = {
@@ -74,14 +75,15 @@ class InMemoryInvoiceStore implements InvoiceStore {
 }
 
 class RedisInvoiceStore implements InvoiceStore {
-  private redis: Redis
+  private redis: RedisClient
   private unpaidSetKey = 'invoices:unpaid'
 
   constructor(url: string) {
     const useTLS = url.startsWith('rediss://') || process.env.REDIS_TLS === '1' || process.env.REDIS_TLS === 'true'
     const rejectUnauthorized = !(process.env.REDIS_TLS_REJECT_UNAUTHORIZED === 'false' || process.env.REDIS_TLS_REJECT_UNAUTHORIZED === '0')
     const options = useTLS ? { tls: { rejectUnauthorized } } : undefined
-    this.redis = options ? new Redis(url, options as any) : new Redis(url)
+    const RedisCtor = IORedis as unknown as { new (url: string, options?: any): RedisClient }
+    this.redis = options ? new RedisCtor(url, options as any) : new RedisCtor(url)
   }
 
   private key(id: string) {
@@ -147,11 +149,9 @@ class RedisInvoiceStore implements InvoiceStore {
         if (!rec.paid && rec.expires_at > nowMs) {
           recs.push(rec)
         } else if (rec.paid || rec.expires_at <= nowMs) {
-          // housekeeping: keep set lean
           await this.redis.srem(this.unpaidSetKey, rec.id)
         }
       } catch {
-        // ignore malformed
       }
     }
     return recs

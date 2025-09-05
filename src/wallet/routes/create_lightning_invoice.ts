@@ -1,6 +1,6 @@
 import { createRoute } from "@hono/zod-openapi"
 import { z } from "@hono/zod-openapi"
-import { SparkHeadersSchema } from "../schema"
+import { SparkHeadersSchema } from "../schema.js"
 
 export const CreateLightningInvoiceSchema = z.object({
     amount: z.number(),
@@ -47,3 +47,5 @@ export const createLightningInvoiceRoute = createRoute({
     },
     tags: ["Wallet"],
 })
+
+

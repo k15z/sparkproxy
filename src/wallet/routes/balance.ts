@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
 
-import { SparkHeadersSchema } from "../schema";
+import { SparkHeadersSchema } from "../schema.js";
 import { createRoute } from "@hono/zod-openapi";
 
 export const BalanceSchema = z
@@ -46,3 +46,5 @@ export const balanceRoute = createRoute({
     },
     tags: ["Wallet"],
 })
+
+

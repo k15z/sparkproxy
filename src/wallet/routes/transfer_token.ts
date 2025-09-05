@@ -1,11 +1,11 @@
 import { createRoute } from "@hono/zod-openapi"
 import { z } from "@hono/zod-openapi"
-import { SparkHeadersSchema } from "../schema"
+import { SparkHeadersSchema } from "../schema.js"
 
 export const TokenTransferSchema = z.object({
     tokenAmount: z.number(),
     tokenIdentifier: z.string(),
-    receiverSparkAddress: z.string(), // TODO: Validate this and make it a SparkAddressFormat
+    receiverSparkAddress: z.string(),
 })
 
 export const TokenTransferOutputSchema = z.object({
@@ -46,3 +46,5 @@ export const tokenTransferRoute = createRoute({
     },
     tags: ["Wallet"],
 })
+
+

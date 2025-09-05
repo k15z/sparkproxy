@@ -1,11 +1,12 @@
 import 'dotenv/config';
-import { publicKey } from './keys'
+import { serve } from '@hono/node-server'
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { app as walletRouter } from './wallet/router'
-import { app as paymentRouter } from './payment/router'
+import { app as walletRouter } from './wallet/router.js'
+import { app as paymentRouter } from './payment/router.js'
 import { swaggerUI } from '@hono/swagger-ui'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { executionTimes } from './utils'
+import { executionTimes } from './utils.js'
+import { publicKey } from './keys.js'
 
 const app = new OpenAPIHono()
 
@@ -32,9 +33,13 @@ app.get("/.well-known/webhook-public-key.pem", (c) => {
   })
 })
 
+// Serve static assets from this project's public/ directory
 app.get("/*", serveStatic({ root: './public' }))
 
-export default {
+const port = Number(process.env.PORT) || 3000
+serve({
   fetch: app.fetch,
-  idleTimeout: 60,
-};
+  port
+}, (info) => {
+  console.log(`Server is running on http://localhost:${info.port}`)
+})

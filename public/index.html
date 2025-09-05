@@ -10,66 +10,15 @@
         integrity="sha512-EZLkOqwILORob+p0BXZc+Vm3RgJBOe1Iq/0fiI7r/wJgzOFZMlsqTa29UEl6v6U6gsV4uIpsNZoV32YZqrCRCQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
-        body {
-            padding: 0;
-            margin: 0;
-        }
-
-        .hero {
-            height: 80vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #f9f9f9;
-            text-align: center;
-            position: relative;
-        }
-
-        .subtitle {
-            display: inline-block;
-            width: calc(100% - 4rem);
-            max-width: 600px;
-        }
-
-        .warning {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-            border-radius: 4px;
-            padding: 1rem;
-            font-size: 0.9em;
-            width: calc(100% - 4rem);
-            max-width: 400px;
-            position: absolute;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .warning a {
-            color: #533f03;
-            text-decoration: underline;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .features {
-            margin-top: 4rem;
-        }
-
-        .feature-card {
-            margin-bottom: 2rem;
-        }
-
-        footer {
-            margin-top: 4rem;
-            padding: 2rem 0;
-            border-top: 1px solid #E1E1E1;
-            font-size: 0.9em;
-        }
+        body { padding: 0; margin: 0; }
+        .hero { height: 80vh; display: flex; align-items: center; justify-content: center; background-color: #f9f9f9; text-align: center; position: relative; }
+        .subtitle { display: inline-block; width: calc(100% - 4rem); max-width: 600px; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 4px; padding: 1rem; font-size: 0.9em; width: calc(100% - 4rem); max-width: 400px; position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+        .warning a { color: #533f03; text-decoration: underline; }
+        .text-center { text-align: center; }
+        .features { margin-top: 4rem; }
+        .feature-card { margin-bottom: 2rem; }
+        footer { margin-top: 4rem; padding: 2rem 0; border-top: 1px solid #E1E1E1; font-size: 0.9em; }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
@@ -107,7 +56,7 @@
                     invoice to sending stablecoins, all over a REST API.
                 </p>
                 <pre><code class="language-bash">curl -X 'POST' \
-  'http://sparkproxy.kevz.dev/wallet/lightning/create' \
+  'http://localhost:3000/wallet/lightning/create' \
   -H 'accept: application/json' \
   -H 'spark-network: MAINNET' \
   -H 'spark-mnemonic: pledge bid coral pitch slight cabbage slice mobile sound swallow brush luxury' \
@@ -128,7 +77,7 @@
                     from Bitcoin to stablecoins, with webhooks to manage the payment lifecycle.
                 </p>
                 <pre><code class="language-bash">curl -X 'POST' \
-  'http://sparkproxy.kevz.dev/payment' \
+  'http://localhost:3000/payment' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -136,67 +85,10 @@
   "webhook_url": "https://your-webhook-url.com/webhook",
   "spark_address": "sp1pgssxfl73kl4z0zdr3rp2v9dcvsuwk7h77ctylk5eds9ylqs3lpftnxy5eatep",
   "offers": [
-    {
-      "asset": "BITCOIN",
-      "amount": 1000,
-      "token_pubkey": ""
-    },
-    {
-      "asset": "TOKEN",
-      "amount": 1000,
-      "token_pubkey": "0369b2fdf62a56e9d21728478d5971e1af6d91b33bd6d4150a137048bdc35fecfb"
-    }
+    { "asset": "BITCOIN", "amount": 1000 },
+    { "asset": "TOKEN", "amount": 1000, "tokenIdentifier": "tkn1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" }
   ]
 }'</code></pre>
-                <p>
-                    The above will return an invoice ID which you can use to track the payment. Once the payment is
-                    received, you will receive a webhook at your specified URL which can be verified with the public
-                    key.
-                </p>
-                <pre><code class="language-python">import logging
-import json
-import uvicorn
-import requests
-import base64
-from fastapi import FastAPI
-from pydantic import BaseModel
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.serialization import load_pem_public_key
-
-app = FastAPI()
-logger = logging.getLogger(__name__)
-
-public_key = load_pem_public_key(
-    requests.get(
-        "https://sparkproxy.kevz.dev/.well-known/webhook-public-key.pem"
-    ).text.encode()
-)
-
-def verify_asymmetric(payload, signature):
-    public_key.verify(
-        base64.b64decode(signature),
-        payload.encode("utf-8"),
-        padding.PKCS1v15(),
-        hashes.SHA256(),
-    )
-    return True
-
-class WebhookPayload(BaseModel):
-    payload: str
-    signature: str
-
-@app.post("/webhook")
-def webhook(payload: WebhookPayload):
-    if not verify_asymmetric(payload.payload, payload.signature):
-        return {"message": "Invalid signature"}
-    payload = json.loads(payload.payload)
-    logger.info(payload)
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-</code></pre>
                 <p>
                     Note that the funds are automatically swept to the Spark address you specified before the webhook
                     is sent.
@@ -211,3 +103,5 @@ if __name__ == "__main__":
 </body>
 
 </html>
+
+

@@ -1,4 +1,6 @@
-import { executionTimes } from "../utils";
+import { Worker } from 'node:worker_threads';
+import { randomUUID } from 'node:crypto';
+import { executionTimes } from "../utils.js";
 import type {
   BalancePayload,
   BalanceResult,
@@ -18,7 +20,7 @@ import type {
   TransferTokensResult,
   WorkerRequest,
   WorkerResponse,
-} from "./types";
+} from "./types.js";
 
 function mergeTimings(timings?: Record<string, number>) {
   if (!timings) return;
@@ -28,30 +30,35 @@ function mergeTimings(timings?: Record<string, number>) {
   }
 }
 
+function resolveWorkerUrl(): URL {
+  // When running from built JS, this file URL contains /dist/
+  const isDist = import.meta.url.includes('/dist/');
+  const workerRelative = isDist ? './spark.worker.js' : './spark.worker.ts';
+  return new URL(workerRelative, import.meta.url);
+}
+
 async function callWorker<TReqPayload, TRes>(op: WorkerRequest["op"], payload: TReqPayload, timeoutMs = 30000): Promise<TRes> {
-  const id = crypto.randomUUID();
-  const worker = new Worker(new URL("./spark.worker.ts", import.meta.url).href, { type: "module", name: "spark" });
+  const id = randomUUID();
+  const worker = new Worker(resolveWorkerUrl(), { name: "spark" });
   try {
     const result = await new Promise<WorkerResponse<TRes>>((resolve, reject) => {
-      const onMessage = (e: MessageEvent<WorkerResponse<TRes>>) => {
-        const data = e.data;
+      const onMessage = (data: WorkerResponse<TRes>) => {
         if (data.id === id) {
-          worker.removeEventListener("message", onMessage as EventListener);
           resolve(data);
         }
       };
-      const onError = (e: ErrorEvent) => {
-        worker.removeEventListener("message", onMessage as EventListener);
-        reject(e.error || new Error(e.message));
+      const onError = (e: Error) => {
+        reject(e);
       };
-      worker.addEventListener("message", onMessage as EventListener);
-      worker.addEventListener("error", onError);
+      worker.on('message', onMessage);
+      worker.on('error', onError);
       worker.postMessage({ id, op, payload } as WorkerRequest);
 
-      setTimeout(() => {
-        worker.removeEventListener("message", onMessage as EventListener);
+      const timeout = setTimeout(() => {
         reject(new Error("Worker timeout"));
       }, timeoutMs);
+
+      worker.on('exit', () => clearTimeout(timeout));
     });
 
     mergeTimings(result.timings);
@@ -63,7 +70,7 @@ async function callWorker<TReqPayload, TRes>(op: WorkerRequest["op"], payload: T
     }
     return result.result as TRes;
   } finally {
-    worker.terminate();
+    await worker.terminate();
   }
 }
 
