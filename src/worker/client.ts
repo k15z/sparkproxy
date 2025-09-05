@@ -37,7 +37,7 @@ function resolveWorkerUrl(): URL {
   return new URL(workerRelative, import.meta.url);
 }
 
-async function callWorker<TReqPayload, TRes>(op: WorkerRequest["op"], payload: TReqPayload, timeoutMs = 30000): Promise<TRes> {
+async function callWorker<TReqPayload, TRes>(op: WorkerRequest["op"], payload: TReqPayload, timeoutMs = 25000): Promise<TRes> {
   const id = randomUUID();
   const worker = new Worker(resolveWorkerUrl(), { name: "spark" });
   try {
