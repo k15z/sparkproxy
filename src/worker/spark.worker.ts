@@ -47,7 +47,7 @@ async function loadWalletWithOptions(mnemonic: string, network: keyof typeof Net
   , timings);
 
   await new Promise((resolve) => {
-    wallet.on("stream:connected", resolve);
+    wallet.on("stream:connected", () => resolve(true));
     setTimeout(() => resolve(true), 5000);
   });
   return wallet;
