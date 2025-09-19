@@ -225,7 +225,7 @@ def check_blink_lightning(environment, amount_sats: int, base_url: str):
             "spark-mnemonic": os.environ["MNEMONIC1"],
             "Content-Type": "application/json",
         },
-        json={"invoice": blink_invoice, "maxFeeSats": 10},
+        json={"invoice": blink_invoice, "maxFeeSats": 15},
     )
     logger.info(f"Spark payment response: {spark_pay_response.text}")
 
