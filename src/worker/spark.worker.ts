@@ -42,7 +42,7 @@ async function loadWalletWithOptions(mnemonic: string, network: keyof typeof Net
   const { wallet } = await measure("loadWallet", async () =>
     SparkWallet.initialize({
       mnemonicOrSeed: mnemonic,
-      options: { ...(environment === "dev" ? devSparkConfig : {}), network },
+      options: { ...(environment === "dev" ? devSparkConfig : {}), network, optimizationOptions: { multiplicity: 1 } },
     })
   , timings);
 
@@ -174,21 +174,20 @@ async function handlePayLightningInvoice(id: string, payload: PayLightningInvoic
 
 async function handleCreateLightningInvoice(id: string, payload: CreateLightningInvoicePayload): Promise<WorkerResponse<CreateLightningInvoiceResult>> {
   const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
   try {
-    const { wallet } = await measure("loadWallet", () => SparkWallet.initialize({
-      mnemonicOrSeed: payload.mnemonic,
-      options: { ...(payload.environment === "dev" ? devSparkConfig : {}), network: payload.network as keyof typeof Network },
-    }), timings);
-    const { invoice } = await measure("createLightningInvoice", () => wallet.createLightningInvoice({
+    wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
+    const { invoice } = await measure("createLightningInvoice", () => wallet!.createLightningInvoice({
       amountSats: payload.amountSats,
       memo: payload.memo,
       expirySeconds: payload.expirySeconds,
     }), timings);
-    await measure("cleanupConnections", () => wallet.cleanupConnections(), timings);
     return ok(id, { invoice: invoice.encodedInvoice }, timings);
   } catch (e) {
     console.error(e);
     return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
   }
 }
 
