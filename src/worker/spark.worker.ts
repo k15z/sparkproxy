@@ -42,7 +42,7 @@ async function loadWalletWithOptions(mnemonic: string, network: keyof typeof Net
   const { wallet } = await measure("loadWallet", async () =>
     SparkWallet.initialize({
       mnemonicOrSeed: mnemonic,
-      options: { ...(environment === "dev" ? devSparkConfig : {}), network, optimizationOptions: { multiplicity: 1 } },
+      options: { ...(environment === "dev" ? devSparkConfig : {}), network, optimizationOptions: { multiplicity: 2 } },
     })
   , timings);
 
@@ -69,7 +69,7 @@ async function handleInitialize(id: string, payload: InitializePayload): Promise
   try {
     const { mnemonic, wallet } = await measure("initialize", () =>
       SparkWallet.initialize({
-        options: { ...(payload.environment === "dev" ? devSparkConfig : {}), network: payload.network as keyof typeof Network },
+        options: { ...(payload.environment === "dev" ? devSparkConfig : {}), network: payload.network as keyof typeof Network, optimizationOptions: { multiplicity: 2 } },
       }),
       timings
     );
