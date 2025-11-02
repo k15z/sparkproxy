@@ -15,6 +15,13 @@ export const SparkMnemonicSchema = z.object({
     }),
 })
 
+export const IdempotencyKeySchema = z.object({
+    'idempotency-key': z.string().optional().openapi({
+        description: 'Idempotency key to prevent duplicate operations',
+        example: undefined
+    }),
+})
+
 export const SparkHeadersSchema = SparkNetworkSchema.merge(SparkMnemonicSchema)
 
 

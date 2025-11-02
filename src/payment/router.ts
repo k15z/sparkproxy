@@ -5,6 +5,7 @@ import { getInvoiceStore } from '../db/store.js';
 import { createInvoiceRoute, checkInvoiceRoute } from './routes/index.js';
 import { workerClient } from '../worker/client.js';
 import { privateKey } from '../keys.js';
+import { checkIdempotency, storeIdempotencyResponse } from '../utils.js';
 
 export const app = new OpenAPIHono()
 const invoices = getInvoiceStore();
@@ -28,6 +29,14 @@ async function sendWebhook(webhookURL: string, payload: string) {
 }
 
 app.openapi(createInvoiceRoute, async (c) => {
+    const idempotencyKey = c.req.valid('header')['idempotency-key']
+    
+    // Check for existing idempotency key
+    const cachedResponse = await checkIdempotency(c, idempotencyKey, 'createInvoice')
+    if (cachedResponse) {
+        return cachedResponse
+    }
+
     const { mnemonic, address: sparkAddress } = await workerClient.initialize({
         network: c.req.valid('json').network as keyof typeof Network,
         environment: 'prod',
@@ -38,7 +47,9 @@ app.openapi(createInvoiceRoute, async (c) => {
     for (const offer of offers as Array<{ asset: string; amount: number; tokenIdentifier?: string }>) {
         const key = offer.asset === 'TOKEN' ? `TOKEN:${offer.tokenIdentifier ?? ''}` : 'BITCOIN'
         if (seenKeys.has(key)) {
-            return c.json({ error: 'Duplicate asset/tokenIdentifier detected' }, 400)
+            const errorResponse = { error: 'Duplicate asset/tokenIdentifier detected' }
+            await storeIdempotencyResponse(idempotencyKey, 'createInvoice', 400, errorResponse)
+            return c.json(errorResponse, 400)
         }
         seenKeys.add(key)
     }
@@ -68,11 +79,14 @@ app.openapi(createInvoiceRoute, async (c) => {
         lightning_invoice: invoice,
     })
 
-    return c.json({
+    const response = {
         invoice_id: id,
         spark_address: sparkAddress,
         lightning_invoice: invoice,
-    }, 200)
+    }
+    
+    await storeIdempotencyResponse(idempotencyKey, 'createInvoice', 200, response)
+    return c.json(response, 200)
 })
 
 app.openapi(checkInvoiceRoute, async (c) => {

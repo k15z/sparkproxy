@@ -1,6 +1,6 @@
 import { createRoute } from "@hono/zod-openapi"
 import { z } from "@hono/zod-openapi"
-import { SparkHeadersSchema } from "../schema.js"
+import { SparkHeadersSchema, IdempotencyKeySchema } from "../schema.js"
 
 export const TransferSchema = z.object({
     amountSats: z.number(),
@@ -15,7 +15,7 @@ export const transferRoute = createRoute({
     method: 'post',
     path: '/transfer',
     request: {
-        headers: SparkHeadersSchema,
+        headers: SparkHeadersSchema.merge(IdempotencyKeySchema),
         body: {
             content: {
                 'application/json': {

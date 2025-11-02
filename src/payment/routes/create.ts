@@ -1,4 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi"
+import { IdempotencyKeySchema } from "../../wallet/schema.js"
 
 export const OfferSchema = z.object({
     asset: z.enum(["BITCOIN", "TOKEN"]).default("BITCOIN"),
@@ -25,6 +26,7 @@ export const createInvoiceRoute = createRoute({
     method: 'post',
     path: '/',
     request: {
+        headers: IdempotencyKeySchema,
         body: {
             content: {
                 'application/json': {

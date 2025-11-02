@@ -171,4 +171,105 @@ export function getInvoiceStore(): InvoiceStore {
   return storeSingleton
 }
 
+export type IdempotencyRecord = {
+  key: string
+  created_at: number
+  status_code: number
+  response_body: string
+  expires_at: number
+}
+
+export interface IdempotencyStore {
+  get(key: string): Promise<IdempotencyRecord | null>
+  set(key: string, statusCode: number, responseBody: string, ttlMs?: number): Promise<void>
+}
+
+class InMemoryIdempotencyStore implements IdempotencyStore {
+  private records = new Map<string, IdempotencyRecord>()
+
+  async get(key: string): Promise<IdempotencyRecord | null> {
+    const record = this.records.get(key)
+    if (!record) return null
+    if (record.expires_at < Date.now()) {
+      this.records.delete(key)
+      return null
+    }
+    return record
+  }
+
+  async set(key: string, statusCode: number, responseBody: string, ttlMs: number = 24 * 60 * 60 * 1000): Promise<void> {
+    const now = Date.now()
+    const record: IdempotencyRecord = {
+      key,
+      created_at: now,
+      status_code: statusCode,
+      response_body: responseBody,
+      expires_at: now + ttlMs,
+    }
+    this.records.set(key, record)
+    // Clean up expired records periodically (simple approach)
+    if (this.records.size > 10000) {
+      const cleanupNow = Date.now()
+      for (const [k, v] of this.records.entries()) {
+        if (v.expires_at < cleanupNow) {
+          this.records.delete(k)
+        }
+      }
+    }
+  }
+}
+
+class RedisIdempotencyStore implements IdempotencyStore {
+  private redis: RedisClient
+
+  constructor(url: string) {
+    const useTLS = url.startsWith('rediss://') || process.env.REDIS_TLS === '1' || process.env.REDIS_TLS === 'true'
+    const rejectUnauthorized = !(process.env.REDIS_TLS_REJECT_UNAUTHORIZED === 'false' || process.env.REDIS_TLS_REJECT_UNAUTHORIZED === '0')
+    const options = useTLS ? { tls: { rejectUnauthorized } } : undefined
+    const RedisCtor = IORedis as unknown as { new (url: string, options?: any): RedisClient }
+    this.redis = options ? new RedisCtor(url, options as any) : new RedisCtor(url)
+  }
+
+  private key(idempotencyKey: string) {
+    return `idempotency:${idempotencyKey}`
+  }
+
+  async get(key: string): Promise<IdempotencyRecord | null> {
+    const json = await this.redis.get(this.key(key))
+    if (!json) return null
+    try {
+      return JSON.parse(json) as IdempotencyRecord
+    } catch {
+      return null
+    }
+  }
+
+  async set(key: string, statusCode: number, responseBody: string, ttlMs: number = 24 * 60 * 60 * 1000): Promise<void> {
+    const now = Date.now()
+    const record: IdempotencyRecord = {
+      key,
+      created_at: now,
+      status_code: statusCode,
+      response_body: responseBody,
+      expires_at: now + ttlMs,
+    }
+    const redisKey = this.key(key)
+    const ttlSeconds = Math.ceil(ttlMs / 1000)
+    await this.redis.setex(redisKey, ttlSeconds, JSON.stringify(record))
+  }
+}
+
+let idempotencyStoreSingleton: IdempotencyStore | null = null
+
+export function getIdempotencyStore(): IdempotencyStore {
+  if (idempotencyStoreSingleton) return idempotencyStoreSingleton
+  const redisUrl = process.env.REDIS_URL
+  if (redisUrl && redisUrl.length > 0) {
+    idempotencyStoreSingleton = new RedisIdempotencyStore(redisUrl)
+  } else {
+    idempotencyStoreSingleton = new InMemoryIdempotencyStore()
+  }
+  return idempotencyStoreSingleton
+}
+
 

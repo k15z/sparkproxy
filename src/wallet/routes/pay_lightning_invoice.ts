@@ -1,6 +1,6 @@
 import { createRoute } from "@hono/zod-openapi"
 import { z } from "@hono/zod-openapi"
-import { SparkHeadersSchema } from "../schema.js"
+import { SparkHeadersSchema, IdempotencyKeySchema } from "../schema.js"
 
 export const PayLightningInvoiceSchema = z.object({
     invoice: z.string(),
@@ -15,7 +15,7 @@ export const payLightningInvoiceRoute = createRoute({
     method: 'post',
     path: '/lightning/pay',
     request: {
-        headers: SparkHeadersSchema,
+        headers: SparkHeadersSchema.merge(IdempotencyKeySchema),
         body: {
             content: {
                 'application/json': {
