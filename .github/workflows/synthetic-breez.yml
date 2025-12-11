@@ -1,0 +1,23 @@
+name: Synthetic Tests (Breez)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
+
+jobs:
+  breez:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Run breez test
+        env:
+          BREEZ_API_KEY: ${{ secrets.BREEZ_API_KEY }}
+          BREEZ_MNEMONIC: ${{ secrets.BREEZ_MNEMONIC }}
+          BLINK_API_KEY: ${{ secrets.BLINK_API_KEY }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: uv run examples/breez.py
+
