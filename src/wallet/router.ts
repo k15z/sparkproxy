@@ -6,6 +6,7 @@ import {
     tokenTransferRoute,
     payLightningInvoiceRoute,
     createLightningInvoiceRoute,
+    createThirdPartyLightningInvoiceRoute,
     batchInitializeRoute,
     staticDepositAddressRoute,
     depositUtxosRoute,
@@ -158,6 +159,25 @@ app.openapi(createLightningInvoiceRoute, async (c) => {
         const errorResponse = { error: unknownErrorToJson(err) }
         await storeIdempotencyResponse(idempotencyKey, 'createLightningInvoice', 400, errorResponse)
         return c.json(errorResponse, 400)
+    }
+})
+
+app.openapi(createThirdPartyLightningInvoiceRoute, async (c) => {
+    const { 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
+    const { receiverIdentityPubkey, amount, memo, expirySeconds } = c.req.valid('json')
+    
+    try {
+        const { invoice } = await workerClient.createThirdPartyLightningInvoice({
+            network,
+            environment,
+            receiverIdentityPubkey,
+            amountSats: amount,
+            memo,
+            expirySeconds,
+        })
+        return c.json({ invoice }, 200)
+    } catch (err: unknown) {
+        return c.json({ error: unknownErrorToJson(err) }, 400)
     }
 })
 
