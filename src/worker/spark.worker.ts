@@ -7,6 +7,8 @@ import type {
   BalanceResult,
   CreateLightningInvoicePayload,
   CreateLightningInvoiceResult,
+  CreateThirdPartyLightningInvoicePayload,
+  CreateThirdPartyLightningInvoiceResult,
   InitializePayload,
   InitializeResult,
   IsOfferMetPayload,
@@ -194,6 +196,34 @@ async function handleCreateLightningInvoice(id: string, payload: CreateLightning
       amountSats: payload.amountSats,
       memo: payload.memo,
       expirySeconds: payload.expirySeconds,
+    }), timings);
+    return ok(id, { invoice: invoice.encodedInvoice }, timings);
+  } catch (e) {
+    console.error(e);
+    return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
+  }
+}
+
+async function handleCreateThirdPartyLightningInvoice(id: string, payload: CreateThirdPartyLightningInvoicePayload): Promise<WorkerResponse<CreateThirdPartyLightningInvoiceResult>> {
+  const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
+  try {
+    // Initialize a temporary wallet just to create the invoice for the third party
+    const { wallet: tempWallet } = await measure("initialize", () =>
+      SparkWallet.initialize({
+        options: { ...(payload.environment === "dev" ? devSparkConfig : {}), network: payload.network as keyof typeof Network, optimizationOptions: { multiplicity: 2 } },
+      }),
+      timings
+    );
+    wallet = tempWallet;
+    
+    const { invoice } = await measure("createLightningInvoice", () => wallet!.createLightningInvoice({
+      amountSats: payload.amountSats,
+      memo: payload.memo,
+      expirySeconds: payload.expirySeconds,
+      receiverIdentityPubkey: payload.receiverIdentityPubkey,
     }), timings);
     return ok(id, { invoice: invoice.encodedInvoice }, timings);
   } catch (e) {
@@ -464,6 +494,9 @@ parentPort.on('message', async (msg: WorkerRequest) => {
       break;
     case "createLightningInvoice":
       parentPort!.postMessage(await handleCreateLightningInvoice(id, payload as CreateLightningInvoicePayload));
+      break;
+    case "createThirdPartyLightningInvoice":
+      parentPort!.postMessage(await handleCreateThirdPartyLightningInvoice(id, payload as CreateThirdPartyLightningInvoicePayload));
       break;
     case "isOfferMet":
       parentPort!.postMessage(await handleIsOfferMet(id, payload as IsOfferMetPayload));

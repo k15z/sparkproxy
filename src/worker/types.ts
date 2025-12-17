@@ -7,6 +7,7 @@ export type WorkerOp =
   | "transferTokens"
   | "payLightningInvoice"
   | "createLightningInvoice"
+  | "createThirdPartyLightningInvoice"
   | "isOfferMet"
   | "transferAll"
   | "getStaticDepositAddress"
@@ -109,6 +110,19 @@ export type CreateLightningInvoicePayload = {
   amountSats: number;
   memo?: string;
   expirySeconds?: number;
+};
+
+export type CreateThirdPartyLightningInvoicePayload = {
+  network: NetworkName;
+  environment: Environment;
+  receiverIdentityPubkey: string; // 33-byte compressed pubkey of the Spark user to receive funds
+  amountSats: number;
+  memo?: string;
+  expirySeconds?: number;
+};
+
+export type CreateThirdPartyLightningInvoiceResult = {
+  invoice: string;
 };
 
 export type CreateLightningInvoiceResult = { invoice: string };
