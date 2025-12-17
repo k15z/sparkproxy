@@ -1,5 +1,18 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { initializeRoute, balanceRoute, transferRoute, tokenTransferRoute, payLightningInvoiceRoute, createLightningInvoiceRoute, batchInitializeRoute } from './routes/index.js'
+import {
+    initializeRoute,
+    balanceRoute,
+    transferRoute,
+    tokenTransferRoute,
+    payLightningInvoiceRoute,
+    createLightningInvoiceRoute,
+    batchInitializeRoute,
+    staticDepositAddressRoute,
+    depositUtxosRoute,
+    claimStaticDepositRoute,
+    claimAllStaticDepositsRoute,
+    coopExitRoute,
+} from './routes/index.js'
 import { unknownErrorToJson, checkIdempotency, storeIdempotencyResponse } from '../utils.js'
 import { workerClient } from '../worker/client.js'
 import type { Bech32mTokenIdentifier, SparkAddressFormat } from '@buildonspark/spark-sdk'
@@ -144,6 +157,127 @@ app.openapi(createLightningInvoiceRoute, async (c) => {
     } catch (err: unknown) {
         const errorResponse = { error: unknownErrorToJson(err) }
         await storeIdempotencyResponse(idempotencyKey, 'createLightningInvoice', 400, errorResponse)
+        return c.json(errorResponse, 400)
+    }
+})
+
+app.openapi(staticDepositAddressRoute, async (c) => {
+    const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
+    try {
+        const { depositAddress } = await workerClient.getStaticDepositAddress({
+            mnemonic,
+            network,
+            environment,
+        })
+        return c.json({ depositAddress }, 200)
+    } catch (err: unknown) {
+        return c.json({ error: unknownErrorToJson(err) }, 400)
+    }
+})
+
+app.openapi(depositUtxosRoute, async (c) => {
+    const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment } = c.req.valid('header')
+    const { depositAddress, includeClaimed } = c.req.valid('query')
+    try {
+        const { utxos } = await workerClient.getDepositUtxos({
+            mnemonic,
+            network,
+            environment,
+            depositAddress,
+            includeClaimed: includeClaimed !== 'false', // defaults to true
+        })
+        return c.json({ utxos }, 200)
+    } catch (err: unknown) {
+        return c.json({ error: unknownErrorToJson(err) }, 400)
+    }
+})
+
+app.openapi(claimStaticDepositRoute, async (c) => {
+    const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment, 'idempotency-key': idempotencyKey } = c.req.valid('header')
+    const { txHash, vout } = c.req.valid('json')
+    
+    // Check for existing idempotency key
+    const cachedResponse = await checkIdempotency(c, idempotencyKey, 'claimStaticDeposit')
+    if (cachedResponse) {
+        return cachedResponse
+    }
+    
+    try {
+        const { depositAmountSats, feeSats, claimedAmountSats } = await workerClient.claimStaticDeposit({
+            mnemonic,
+            network,
+            environment,
+            txHash,
+            vout,
+        })
+        const response = { depositAmountSats, feeSats, claimedAmountSats }
+        await storeIdempotencyResponse(idempotencyKey, 'claimStaticDeposit', 200, response)
+        return c.json(response, 200)
+    } catch (err: unknown) {
+        const errorResponse = { error: unknownErrorToJson(err) }
+        await storeIdempotencyResponse(idempotencyKey, 'claimStaticDeposit', 400, errorResponse)
+        return c.json(errorResponse, 400)
+    }
+})
+
+app.openapi(claimAllStaticDepositsRoute, async (c) => {
+    const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment, 'idempotency-key': idempotencyKey } = c.req.valid('header')
+    
+    // Check for existing idempotency key
+    const cachedResponse = await checkIdempotency(c, idempotencyKey, 'claimAllStaticDeposits')
+    if (cachedResponse) {
+        return cachedResponse
+    }
+    
+    try {
+        const { claims, totalClaimedSats } = await workerClient.claimAllStaticDeposits({
+            mnemonic,
+            network,
+            environment,
+        })
+        const response = { claims, totalClaimedSats }
+        await storeIdempotencyResponse(idempotencyKey, 'claimAllStaticDeposits', 200, response)
+        return c.json(response, 200)
+    } catch (err: unknown) {
+        const errorResponse = { error: unknownErrorToJson(err) }
+        await storeIdempotencyResponse(idempotencyKey, 'claimAllStaticDeposits', 400, errorResponse)
+        return c.json(errorResponse, 400)
+    }
+})
+
+app.openapi(coopExitRoute, async (c) => {
+    const { 'spark-mnemonic': mnemonic, 'spark-network': network, 'spark-environment': environment, 'idempotency-key': idempotencyKey } = c.req.valid('header')
+    const { onchainAddress, amountSats, exitSpeed, deductFeeFromWithdrawalAmount } = c.req.valid('json')
+    
+    // Check for existing idempotency key
+    const cachedResponse = await checkIdempotency(c, idempotencyKey, 'coopExit')
+    if (cachedResponse) {
+        return cachedResponse
+    }
+    
+    try {
+        const result = await workerClient.coopExit({
+            mnemonic,
+            network,
+            environment,
+            onchainAddress,
+            amountSats,
+            exitSpeed,
+            deductFeeFromWithdrawalAmount,
+        })
+        const response = {
+            id: result.id,
+            onchainAddress: result.onchainAddress,
+            amountSats: result.amountSats,
+            feeSats: result.feeSats,
+            exitSpeed: result.exitSpeed,
+            status: result.status,
+        }
+        await storeIdempotencyResponse(idempotencyKey, 'coopExit', 200, response)
+        return c.json(response, 200)
+    } catch (err: unknown) {
+        const errorResponse = { error: unknownErrorToJson(err) }
+        await storeIdempotencyResponse(idempotencyKey, 'coopExit', 400, errorResponse)
         return c.json(errorResponse, 400)
     }
 })
