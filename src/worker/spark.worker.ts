@@ -19,6 +19,19 @@ import type {
   TransferResult,
   TransferTokensPayload,
   TransferTokensResult,
+  GetStaticDepositAddressPayload,
+  GetStaticDepositAddressResult,
+  GetDepositUtxosPayload,
+  GetDepositUtxosResult,
+  ClaimStaticDepositPayload,
+  ClaimStaticDepositResult,
+  ClaimAllStaticDepositsPayload,
+  ClaimAllStaticDepositsResult,
+  CoopExitPayload,
+  CoopExitResult,
+  DepositUtxo,
+  ClaimedDeposit,
+  ExitSpeed,
   WorkerRequest,
   WorkerResponse,
 } from "./types.js";
@@ -275,6 +288,158 @@ async function handleTransferAll(id: string, payload: TransferAllPayload): Promi
   }
 }
 
+async function handleGetStaticDepositAddress(id: string, payload: GetStaticDepositAddressPayload): Promise<WorkerResponse<GetStaticDepositAddressResult>> {
+  const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
+  try {
+    wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
+    const depositAddress = await measure("getStaticDepositAddress", () => wallet!.getStaticDepositAddress(), timings);
+    return ok(id, { depositAddress: depositAddress as string }, timings);
+  } catch (e) {
+    console.error(e);
+    return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
+  }
+}
+
+async function handleGetDepositUtxos(id: string, payload: GetDepositUtxosPayload): Promise<WorkerResponse<GetDepositUtxosResult>> {
+  const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
+  try {
+    wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
+    // includeClaimed defaults to true to show all UTXOs; SDK uses excludeClaimed as 4th param
+    const excludeClaimed = payload.includeClaimed === false;
+    const rawUtxos = await measure("getUtxosForDepositAddress", () => wallet!.getUtxosForDepositAddress(payload.depositAddress, undefined, undefined, excludeClaimed), timings) as any[];
+    const utxos: DepositUtxo[] = rawUtxos.map((utxo: any) => ({
+      txHash: utxo.txHash ?? utxo.txid ?? utxo.transactionHash,
+      vout: utxo.vout ?? utxo.outputIndex ?? 0,
+      amountSats: Number(utxo.amountSats ?? utxo.amount ?? utxo.value ?? 0),
+      confirmations: utxo.confirmations ?? 0,
+      claimed: utxo.claimed ?? false,
+    }));
+    return ok(id, { utxos }, timings);
+  } catch (e) {
+    console.error(e);
+    return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
+  }
+}
+
+async function handleClaimStaticDeposit(id: string, payload: ClaimStaticDepositPayload): Promise<WorkerResponse<ClaimStaticDepositResult>> {
+  const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
+  try {
+    wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
+    const quote = await measure("getClaimStaticDepositQuote", () => wallet!.getClaimStaticDepositQuote(payload.txHash, payload.vout), timings) as any;
+    await measure("claimStaticDeposit", () => wallet!.claimStaticDeposit(quote), timings);
+    return ok(id, {
+      depositAmountSats: Number(quote.depositAmountSats ?? 0),
+      feeSats: Number(quote.feeSats ?? 0),
+      claimedAmountSats: Number(quote.creditAmountSats ?? 0),
+    }, timings);
+  } catch (e) {
+    console.error(e);
+    return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
+  }
+}
+
+async function handleClaimAllStaticDeposits(id: string, payload: ClaimAllStaticDepositsPayload): Promise<WorkerResponse<ClaimAllStaticDepositsResult>> {
+  const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
+  try {
+    wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
+    
+    // Get the static deposit address
+    const depositAddress = await measure("getStaticDepositAddress", () => wallet!.getStaticDepositAddress(), timings) as string;
+    
+    // Get only unclaimed UTXOs for the deposit address (excludeClaimed = true as 4th param)
+    const rawUtxos = await measure("getUtxosForDepositAddress", () => wallet!.getUtxosForDepositAddress(depositAddress, undefined, undefined, true), timings) as any[];
+    
+    const claims: ClaimedDeposit[] = [];
+    let totalClaimedSats = 0;
+    
+    // Claim each unclaimed UTXO
+    for (const utxo of rawUtxos) {
+      
+      const txHash = utxo.txHash ?? utxo.txid ?? (utxo as any).transactionHash;
+      const vout = utxo.vout ?? (utxo as any).outputIndex ?? 0;
+      
+      try {
+        const quote = await measure("getClaimStaticDepositQuote", () => wallet!.getClaimStaticDepositQuote(txHash, vout), timings) as any;
+        await measure("claimStaticDeposit", () => wallet!.claimStaticDeposit(quote), timings);
+        
+        const depositAmountSats = Number(quote.depositAmountSats ?? 0);
+        const feeSats = Number(quote.feeSats ?? 0);
+        const claimedAmountSats = Number(quote.creditAmountSats ?? 0);
+        claims.push({ txHash, vout, depositAmountSats, feeSats, claimedAmountSats });
+        totalClaimedSats += claimedAmountSats;
+      } catch (claimErr) {
+        // Log but continue with other UTXOs
+        console.warn(`Failed to claim UTXO ${txHash}:${vout}:`, claimErr);
+      }
+    }
+    
+    return ok(id, { claims, totalClaimedSats }, timings);
+  } catch (e) {
+    console.error(e);
+    return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
+  }
+}
+
+async function handleCoopExit(id: string, payload: CoopExitPayload): Promise<WorkerResponse<CoopExitResult>> {
+  const timings: Timings = {};
+  let wallet: SparkWallet | null = null;
+  try {
+    wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
+    
+    const exitSpeedInput = payload.exitSpeed ?? "fast";
+    const deductFeeFromWithdrawalAmount = payload.deductFeeFromWithdrawalAmount ?? false;
+    
+    // Map string exit speed to SDK format
+    const exitSpeedMap: Record<string, string> = {
+      "fast": "FAST",
+      "medium": "MEDIUM",
+      "slow": "SLOW",
+    };
+    const sdkExitSpeed = exitSpeedMap[exitSpeedInput] ?? "FAST";
+    
+    // Get fee quote
+    const feeQuote = await measure("getWithdrawalFeeQuote", () => wallet!.getWithdrawalFeeQuote({
+      amountSats: payload.amountSats,
+      withdrawalAddress: payload.onchainAddress,
+    }), timings) as any;
+    
+    // Execute withdrawal
+    const withdrawal = await measure("withdraw", () => wallet!.withdraw({
+      onchainAddress: payload.onchainAddress,
+      exitSpeed: sdkExitSpeed as any,
+      amountSats: payload.amountSats,
+      feeQuote,
+      deductFeeFromWithdrawalAmount,
+    }), timings) as any;
+    
+    return ok(id, {
+      id: withdrawal.id,
+      onchainAddress: payload.onchainAddress,
+      amountSats: payload.amountSats,
+      feeSats: Number(feeQuote.feeSats ?? feeQuote.fee ?? 0),
+      exitSpeed: exitSpeedInput as ExitSpeed,
+      status: withdrawal.status ?? "pending",
+    }, timings);
+  } catch (e) {
+    console.error(e);
+    return err(id, e, timings);
+  } finally {
+    if (wallet) await measure("cleanupConnections", () => wallet!.cleanupConnections(), timings).catch(() => {});
+  }
+}
+
 if (!parentPort) {
   throw new Error('Worker must be run as a worker thread');
 }
@@ -305,6 +470,21 @@ parentPort.on('message', async (msg: WorkerRequest) => {
       break;
     case "transferAll":
       parentPort!.postMessage(await handleTransferAll(id, payload as TransferAllPayload));
+      break;
+    case "getStaticDepositAddress":
+      parentPort!.postMessage(await handleGetStaticDepositAddress(id, payload as GetStaticDepositAddressPayload));
+      break;
+    case "getDepositUtxos":
+      parentPort!.postMessage(await handleGetDepositUtxos(id, payload as GetDepositUtxosPayload));
+      break;
+    case "claimStaticDeposit":
+      parentPort!.postMessage(await handleClaimStaticDeposit(id, payload as ClaimStaticDepositPayload));
+      break;
+    case "claimAllStaticDeposits":
+      parentPort!.postMessage(await handleClaimAllStaticDeposits(id, payload as ClaimAllStaticDepositsPayload));
+      break;
+    case "coopExit":
+      parentPort!.postMessage(await handleCoopExit(id, payload as CoopExitPayload));
       break;
     default:
       parentPort!.postMessage({ id, ok: false, error: { name: "BadRequest", message: `Unknown op: ${String(op)}` } as WorkerResponse["error"] });

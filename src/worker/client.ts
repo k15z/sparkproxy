@@ -18,6 +18,16 @@ import type {
   TransferResult,
   TransferTokensPayload,
   TransferTokensResult,
+  GetStaticDepositAddressPayload,
+  GetStaticDepositAddressResult,
+  GetDepositUtxosPayload,
+  GetDepositUtxosResult,
+  ClaimStaticDepositPayload,
+  ClaimStaticDepositResult,
+  ClaimAllStaticDepositsPayload,
+  ClaimAllStaticDepositsResult,
+  CoopExitPayload,
+  CoopExitResult,
   WorkerRequest,
   WorkerResponse,
 } from "./types.js";
@@ -83,6 +93,11 @@ export const workerClient = {
   createLightningInvoice: (payload: CreateLightningInvoicePayload, timeoutMs?: number) => callWorker<CreateLightningInvoicePayload, CreateLightningInvoiceResult>("createLightningInvoice", payload, timeoutMs),
   isOfferMet: (payload: IsOfferMetPayload, timeoutMs?: number) => callWorker<IsOfferMetPayload, IsOfferMetResult>("isOfferMet", payload, timeoutMs),
   transferAll: (payload: TransferAllPayload, timeoutMs?: number) => callWorker<TransferAllPayload, TransferAllResult>("transferAll", payload, timeoutMs),
+  getStaticDepositAddress: (payload: GetStaticDepositAddressPayload, timeoutMs?: number) => callWorker<GetStaticDepositAddressPayload, GetStaticDepositAddressResult>("getStaticDepositAddress", payload, timeoutMs),
+  getDepositUtxos: (payload: GetDepositUtxosPayload, timeoutMs?: number) => callWorker<GetDepositUtxosPayload, GetDepositUtxosResult>("getDepositUtxos", payload, timeoutMs),
+  claimStaticDeposit: (payload: ClaimStaticDepositPayload, timeoutMs?: number) => callWorker<ClaimStaticDepositPayload, ClaimStaticDepositResult>("claimStaticDeposit", payload, timeoutMs),
+  claimAllStaticDeposits: (payload: ClaimAllStaticDepositsPayload, timeoutMs?: number) => callWorker<ClaimAllStaticDepositsPayload, ClaimAllStaticDepositsResult>("claimAllStaticDeposits", payload, timeoutMs),
+  coopExit: (payload: CoopExitPayload, timeoutMs?: number) => callWorker<CoopExitPayload, CoopExitResult>("coopExit", payload, timeoutMs),
 };
 
 
