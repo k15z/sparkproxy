@@ -363,7 +363,12 @@ async function handleClaimStaticDeposit(id: string, payload: ClaimStaticDepositP
   try {
     wallet = await loadWalletWithOptions(payload.mnemonic, payload.network as keyof typeof Network, payload.environment, timings);
     const quote = await measure("getClaimStaticDepositQuote", () => wallet!.getClaimStaticDepositQuote(payload.txHash, payload.vout), timings) as any;
-    await measure("claimStaticDeposit", () => wallet!.claimStaticDeposit(quote), timings);
+    await measure("claimStaticDeposit", () => wallet!.claimStaticDeposit({
+      transactionId: quote.transactionId,
+      creditAmountSats: quote.creditAmountSats,
+      sspSignature: quote.signature,
+      outputIndex: quote.outputIndex,
+    }), timings);
     return ok(id, {
       depositAmountSats: Number(quote.depositAmountSats ?? 0),
       feeSats: Number(quote.feeSats ?? 0),
@@ -400,7 +405,12 @@ async function handleClaimAllStaticDeposits(id: string, payload: ClaimAllStaticD
       
       try {
         const quote = await measure("getClaimStaticDepositQuote", () => wallet!.getClaimStaticDepositQuote(txHash, vout), timings) as any;
-        await measure("claimStaticDeposit", () => wallet!.claimStaticDeposit(quote), timings);
+        await measure("claimStaticDeposit", () => wallet!.claimStaticDeposit({
+          transactionId: quote.transactionId,
+          creditAmountSats: quote.creditAmountSats,
+          sspSignature: quote.signature,
+          outputIndex: quote.outputIndex,
+        }), timings);
         
         const depositAmountSats = Number(quote.depositAmountSats ?? 0);
         const feeSats = Number(quote.feeSats ?? 0);
