@@ -157,7 +157,9 @@ async def main():
         logger.info(f"Creating Breez invoice for {amount_sats} sats...")
         request = ReceivePaymentRequest(
             payment_method=ReceivePaymentMethod.BOLT11_INVOICE(
-                "Breez synthetic test", amount_sats
+                description="Breez synthetic test",
+                amount_sats=amount_sats,
+                expiry_secs=3600,  # 1 hour expiry
             )
         )
         response = await sdk.receive_payment(request=request)
