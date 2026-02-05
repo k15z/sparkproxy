@@ -21,11 +21,16 @@ from breez_sdk_spark import (
     connect,
     ConnectRequest,
     GetInfoRequest,
+    GetPaymentRequest,
     ReceivePaymentRequest,
     ReceivePaymentMethod,
     PrepareSendPaymentRequest,
     SendPaymentRequest,
     SendPaymentMethod,
+    SendPaymentOptions,
+    PaymentStatus,
+    PaymentDetails,
+    SdkError,
 )
 from breez_sdk_spark.breez_sdk_spark import uniffi_set_event_loop
 
@@ -103,6 +108,36 @@ def blink_create_invoice(amount_sats: int) -> str:
     return data["data"]["lnInvoiceCreate"]["invoice"]["paymentRequest"]
 
 
+async def wait_for_payment_completion(
+    sdk,
+    payment_id: str,
+    *,
+    timeout_secs: float = 120.0,
+    poll_interval_secs: float = 2.0,
+):
+    """
+    Poll until a Lightning payment is completed or failed.
+    Returns the payment object, or None if timed out.
+    Handles StorageError when payment record isn't persisted yet.
+    """
+    deadline = time.monotonic() + timeout_secs
+    while time.monotonic() < deadline:
+        try:
+            response = await sdk.get_payment(request=GetPaymentRequest(payment_id=payment_id))
+        except SdkError.StorageError as e:
+            # Payment record may not be persisted yet, keep polling
+            logger.debug("Payment %s not found in storage yet: %s", payment_id, e)
+            await asyncio.sleep(poll_interval_secs)
+            continue
+        payment = response.payment
+        if payment.status in (PaymentStatus.COMPLETED, PaymentStatus.FAILED):
+            return payment
+        logger.debug("Payment %s status: %s, polling again...", payment_id, payment.status)
+        await asyncio.sleep(poll_interval_secs)
+    logger.warning("Payment %s did not complete within %s seconds", payment_id, timeout_secs)
+    return None
+
+
 async def main():
     uniffi_set_event_loop(asyncio.get_event_loop())
     mnemonic = os.environ["BREEZ_MNEMONIC"]
@@ -122,7 +157,7 @@ async def main():
         logger.info(f"Creating Breez invoice for {amount_sats} sats...")
         request = ReceivePaymentRequest(
             payment_method=ReceivePaymentMethod.BOLT11_INVOICE(
-                description="Breez synthetic test", amount_sats=amount_sats, expiry_secs=60 * 60 * 24
+                "Breez synthetic test", amount_sats
             )
         )
         response = await sdk.receive_payment(request=request)
@@ -170,9 +205,27 @@ async def main():
             logger.info(f"Spark Transfer Fees: {spark_transfer_fee_sats} sats")
         
         logger.info("Having Breez pay the Blink invoice...")
-        pay_request = SendPaymentRequest(prepare_response=prepare_response)
+        # Optional: wait up to 15s for payment to complete in send_payment itself
+        options = SendPaymentOptions.BOLT11_INVOICE(
+            prefer_spark=False,
+            completion_timeout_secs=15,
+        )
+        pay_request = SendPaymentRequest(
+            prepare_response=prepare_response,
+            options=options,
+        )
         pay_response = await sdk.send_payment(request=pay_request)
-        logger.info(f"Breez payment response: {pay_response}")
+        payment = pay_response.payment
+        logger.info("Breez payment: id=%s status=%s", payment.id, payment.status)
+
+        # Wait for payment to complete (also handles storage persistence race condition)
+        final = await wait_for_payment_completion(sdk, payment.id, timeout_secs=120, poll_interval_secs=2)
+        if not final or final.status != PaymentStatus.COMPLETED:
+            raise RuntimeError("Breez payment did not complete successfully")
+
+        # Print preimage (proof of payment)
+        if isinstance(final.details, PaymentDetails.LIGHTNING) and final.details.preimage:
+            logger.info("Payment preimage: %s", final.details.preimage)
 
         logger.info("Successfully completed bidirectional lightning payments!")
         return sdk
