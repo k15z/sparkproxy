@@ -108,7 +108,7 @@ async function handleBalance(id: string, payload: BalancePayload): Promise<Worke
       address,
       balance: Number(balance),
       tokenBalances: Array.from(tokenBalances.entries()).map(([tokenIdentifier, tokenBalance]) => ({
-        balance: Number(tokenBalance.balance),
+        balance: Number(tokenBalance.availableToSendBalance),
         tokenInfo: {
           tokenIdentifier,
           tokenPublicKey: tokenBalance.tokenMetadata.tokenPublicKey,
@@ -261,7 +261,7 @@ async function handleIsOfferMet(id: string, payload: IsOfferMetPayload): Promise
         }
       } else if (offer.asset === "TOKEN") {
         const tokenBalance = balance.tokenBalances.get(offer.tokenIdentifier);
-        if (tokenBalance && tokenBalance.balance >= offer.amount) {
+        if (tokenBalance && tokenBalance.availableToSendBalance >= offer.amount) {
           const address = await measure("getSparkAddress", () => wallet!.getSparkAddress(), timings);
           const resp = await measure("sparkscan", () => fetch(`https://api.sparkscan.io/v1/address/${address}/transactions?network=${payload.network}&limit=25&offset=0`, { headers: { accept: "application/json" } }), timings);
           const transactions = (await resp.json()).data;
@@ -303,7 +303,7 @@ async function handleTransferAll(id: string, payload: TransferAllPayload): Promi
         "transferTokens",
         () => wallet!.transferTokens({
           tokenIdentifier: tokenIdentifier as Bech32mTokenIdentifier,
-          tokenAmount: tokenBalance.balance,
+          tokenAmount: tokenBalance.availableToSendBalance,
           receiverSparkAddress: payload.receiverSparkAddress,
         }),
         timings
