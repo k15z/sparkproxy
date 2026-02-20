@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#   "breez_sdk_spark",
+#   "breez_sdk_spark>=0.9.0",
 #   "python-dotenv>=1.0.0",
 #   "requests>=2.31",
 # ]
@@ -160,6 +160,7 @@ async def main():
                 description="Breez synthetic test",
                 amount_sats=amount_sats,
                 expiry_secs=3600,  # 1 hour expiry
+                payment_hash=None,
             )
         )
         response = await sdk.receive_payment(request=request)
