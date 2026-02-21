@@ -227,8 +227,8 @@ async def main():
             raise RuntimeError("Breez payment did not complete successfully")
 
         # Print preimage (proof of payment)
-        if isinstance(final.details, PaymentDetails.LIGHTNING) and final.details.preimage:
-            logger.info("Payment preimage: %s", final.details.preimage)
+        if isinstance(final.details, PaymentDetails.LIGHTNING) and final.details.htlc_details.preimage:
+            logger.info("Payment preimage: %s", final.details.htlc_details.preimage)
 
         logger.info("Successfully completed bidirectional lightning payments!")
         return sdk
